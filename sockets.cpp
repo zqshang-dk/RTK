@@ -7,7 +7,8 @@
 bool OpenSocket(SOCKET& sock, const char IP[], const unsigned short Port)
 {
 	WSADATA wsaData;
-	SOCKADDR_IN addrSrv;
+	SOCKADDR_IN addrSrv{};
+	sock = INVALID_SOCKET;
 
 	if(!WSAStartup(MAKEWORD(1, 1), &wsaData))
 	{
@@ -16,9 +17,16 @@ bool OpenSocket(SOCKET& sock, const char IP[], const unsigned short Port)
 			addrSrv.sin_addr.S_un.S_addr = inet_addr(IP);
 			addrSrv.sin_family = AF_INET;
 			addrSrv.sin_port = htons(Port);
-			connect(sock, (SOCKADDR*)&addrSrv, sizeof(SOCKADDR));	
+			if (connect(sock, (SOCKADDR*)&addrSrv, sizeof(SOCKADDR)) == SOCKET_ERROR)
+			{
+				closesocket(sock);
+				sock = INVALID_SOCKET;
+				WSACleanup();
+				return false;
+			}
 			return true;
 		}
+		WSACleanup();
 	}
 	return false;
 }

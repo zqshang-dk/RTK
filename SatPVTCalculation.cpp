@@ -9,28 +9,28 @@ double  GetDiffTime(GPSTIME*t1, GPSTIME* t2) {
 }
 
 /********************************************************************************
-	º¯ÊýÃû³Æ£ºCompSatClkoff
+	å‡½æ•°åç§°ï¼šCompSatClkoff
 
-	º¯ÊýÄ¿µÄ£º¼ÆËãGPSºÍBDSÎÀÐÇÖÓ²îºÍÖÓËÙ
+	å‡½æ•°ç›®çš„ï¼šè®¡ç®—GPSå’ŒBDSå«æ˜Ÿé’Ÿå·®å’Œé’Ÿé€Ÿ
 
-	×¢ÒâÊÂÏî£º
-		1.ÐÇÀú¹ýÆÚÅÐ¶Ï£¬ÐÇÀú½¡¿µ±ê¼ÇSVHealthÊÇ·ñÎª0£¬Èç¹û¹ýÆÚ»òÕß²»½¡¿µ£¬·µ»Øfalse£¬·ñÔò·µ»Øtrue£»
-		2.×¢ÒâBDSÐÇÀúµÄ²Î¿¼Ê±¼äÎªBDT£¬GPST-BDT=14s
-		3.¼ÆËã³É¹¦£¬Mid->valid=true;
+	æ³¨æ„äº‹é¡¹ï¼š
+		1.æ˜ŸåŽ†è¿‡æœŸåˆ¤æ–­ï¼Œæ˜ŸåŽ†å¥åº·æ ‡è®°SVHealthæ˜¯å¦ä¸º0ï¼Œå¦‚æžœè¿‡æœŸæˆ–è€…ä¸å¥åº·ï¼Œè¿”å›žfalseï¼Œå¦åˆ™è¿”å›žtrueï¼›
+		2.æ³¨æ„BDSæ˜ŸåŽ†çš„å‚è€ƒæ—¶é—´ä¸ºBDTï¼ŒGPST-BDT=14s
+		3.è®¡ç®—æˆåŠŸï¼ŒMid->valid=true;
 
-	ÊäÈë²ÎÊý£º
-		prn    ÎÀÐÇµÄprnºÅ
-		sys    ÎÀÐÇÏµÍ³£¨GPS/BDS£©
-		t      ÎÀÐÇÐÅºÅ·¢ÉäÊ±¼ä
-		geph   GPSÎÀÐÇÐÇÀú
-		beph   BDSÎÀÐÇÐÇÀú
-		Mid    ÖÐ¼ä±äÁ¿
+	è¾“å…¥å‚æ•°ï¼š
+		prn    å«æ˜Ÿçš„prnå·
+		sys    å«æ˜Ÿç³»ç»Ÿï¼ˆGPS/BDSï¼‰
+		t      å«æ˜Ÿä¿¡å·å‘å°„æ—¶é—´
+		geph   GPSå«æ˜Ÿæ˜ŸåŽ†
+		beph   BDSå«æ˜Ÿæ˜ŸåŽ†
+		Mid    ä¸­é—´å˜é‡
 
-	Êä³ö²ÎÊý£º
-		²»¼ÓÏà¶ÔÂÛ¸ÄÕýµÄÎÀÐÇÖÓ²î    
+	è¾“å‡ºå‚æ•°ï¼š
+		ä¸åŠ ç›¸å¯¹è®ºæ”¹æ­£çš„å«æ˜Ÿé’Ÿå·®    
 *********************************************************************************/
-// ÓÃÓÚÅÐ¶ÏÎÀÐÇÊÇ·ñ¹ýÆÚ£¬ÊÇ·ñ½¡¿µ
-// ¼ÆËãÎÀÐÇ¡°¸ÅÂÔ¡±ÖÓ²î
+// ç”¨äºŽåˆ¤æ–­å«æ˜Ÿæ˜¯å¦è¿‡æœŸï¼Œæ˜¯å¦å¥åº·
+// è®¡ç®—å«æ˜Ÿâ€œæ¦‚ç•¥â€é’Ÿå·®
 bool CompSatClkOff(const int prn, const GNSSSYS sys, const GPSTIME* t, GPSEPH* geph, GPSEPH* beph, SATMIDRES* Mid) {
 	
 	double dt, Limt=7500;
@@ -67,37 +67,37 @@ bool CompSatClkOff(const int prn, const GNSSSYS sys, const GPSTIME* t, GPSEPH* g
 
 
 /******************************************************************************************
-	º¯ÊýÃû³Æ£ºCompGPSSatPVT
+	å‡½æ•°åç§°ï¼šCompGPSSatPVT
 
-	º¯ÊýÄ¿µÄ£º¼ÆËãGPSÎÀÐÇµÄÎ»ÖÃ¡¢ËÙ¶È¡¢ÖÓ²î¡¢ÖÓËÙ£¨º¬Ïà¶ÔÂÛ¸ÄÕý£©
+	å‡½æ•°ç›®çš„ï¼šè®¡ç®—GPSå«æ˜Ÿçš„ä½ç½®ã€é€Ÿåº¦ã€é’Ÿå·®ã€é’Ÿé€Ÿï¼ˆå«ç›¸å¯¹è®ºæ”¹æ­£ï¼‰
 
-	×¢ÒâÊÂÏî£º
-		1.ÐÇÀú¹ýÆÚÅÐ¶Ï£¬ÐÇÀú½¡¿µ±ê¼ÇSVHealthÊÇ·ñÎª0£¬Èç¹û¹ýÆÚ»òÕß²»½¡¿µ£¬·µ»Øfalse£¬·ñÔò·µ»Øtrue£»
-		2.×¢ÒâBDSÐÇÀúµÄ²Î¿¼Ê±¼äÎªBDT£¬GPST-BDT=14s
-		3.¼ÆËã³É¹¦£¬Mid->valid=true;
+	æ³¨æ„äº‹é¡¹ï¼š
+		1.æ˜ŸåŽ†è¿‡æœŸåˆ¤æ–­ï¼Œæ˜ŸåŽ†å¥åº·æ ‡è®°SVHealthæ˜¯å¦ä¸º0ï¼Œå¦‚æžœè¿‡æœŸæˆ–è€…ä¸å¥åº·ï¼Œè¿”å›žfalseï¼Œå¦åˆ™è¿”å›žtrueï¼›
+		2.æ³¨æ„BDSæ˜ŸåŽ†çš„å‚è€ƒæ—¶é—´ä¸ºBDTï¼ŒGPST-BDT=14s
+		3.è®¡ç®—æˆåŠŸï¼ŒMid->valid=true;
 
-	ÊäÈë²ÎÊý£º
-		prn    ÎÀÐÇµÄprnºÅ
-		sys    ÎÀÐÇÏµÍ³£¨GPS/BDS£©
-		t      ÎÀÐÇÐÅºÅ·¢ÉäÊ±¼ä
-		geph   GPSÎÀÐÇÐÇÀú
-		Mid    ÖÐ¼ä±äÁ¿
+	è¾“å…¥å‚æ•°ï¼š
+		prn    å«æ˜Ÿçš„prnå·
+		sys    å«æ˜Ÿç³»ç»Ÿï¼ˆGPS/BDSï¼‰
+		t      å«æ˜Ÿä¿¡å·å‘å°„æ—¶é—´
+		geph   GPSå«æ˜Ÿæ˜ŸåŽ†
+		Mid    ä¸­é—´å˜é‡
 
-	Êä³ö²ÎÊý£º
-		GPSÎÀÐÇµÄÎ»ÖÃ¡¢ËÙ¶È¡¢ÖÓ²î¡¢ÖÓËÙ£¨º¬Ïà¶ÔÂÛ¸ÄÕý£©
+	è¾“å‡ºå‚æ•°ï¼š
+		GPSå«æ˜Ÿçš„ä½ç½®ã€é€Ÿåº¦ã€é’Ÿå·®ã€é’Ÿé€Ÿï¼ˆå«ç›¸å¯¹è®ºæ”¹æ­£ï¼‰
 *********************************************************************************************/
 int CompGPSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* geph, SATMIDRES* Mid) {
 	const GPSEPH* eph = geph + prn - 1;
 	GPSTIME GT = *t;
 	GPSTIME GTOE = eph->TOE;
 
-	// ¼ÆËã¹ìµÀ³¤°ëÖá
+	// è®¡ç®—è½¨é“é•¿åŠè½´
 	double A = eph->sqrt_A * eph->sqrt_A;
 
-	// ¼ÆËãÆ½¾ùÔËËã½ÇËÙ¶È
+	// è®¡ç®—å¹³å‡è¿ç®—è§’é€Ÿåº¦
 	double n0 = sqrt(mu_GPS / (A * A * A));
 
-	// ¼ÆËãÏà¶ÔÓÚÐÇÀú²Î¿¼ÀúÔªµÄÊ±¼ä
+	// è®¡ç®—ç›¸å¯¹äºŽæ˜ŸåŽ†å‚è€ƒåŽ†å…ƒçš„æ—¶é—´
 	double tk = GetDiffTime(&GT, &GTOE);
 	//double tk = (t->Week - eph->TOE.Week) * 604800.0 + (t->SecOfWeek - eph->TOE.SecOfWeek);
 	if (fabs(tk) > 7500.0 || eph->SVhealth != 0 || eph->PRN == 0) {
@@ -105,13 +105,13 @@ int CompGPSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* geph, SATMIDRES
 		return 0;
 	}
 
-	// ¶ÔÆ½¾ùÔË¶¯½ÇËÙ¶È½øÐÐ¸ÄÕý
+	// å¯¹å¹³å‡è¿åŠ¨è§’é€Ÿåº¦è¿›è¡Œæ”¹æ­£
 	double n = n0 + eph->deltaN;
 	
-	// ¼ÆËãÆ½½üµã½Ç
+	// è®¡ç®—å¹³è¿‘ç‚¹è§’
 	double Mk = eph->M0 + n * tk;
 	
-	// ¼ÆËãÆ«½üµã½Ç£¨×¢Òâ£º¼ÓÉÏÑ­»·´ÎÊý£©
+	// è®¡ç®—åè¿‘ç‚¹è§’ï¼ˆæ³¨æ„ï¼šåŠ ä¸Šå¾ªçŽ¯æ¬¡æ•°ï¼‰
 	double Ek = Mk;
 	double Ek_ref = Mk;
 	for (int i = 0; i < 10; i++) {
@@ -123,55 +123,55 @@ int CompGPSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* geph, SATMIDRES
 		}
 	}
 
-	// ¼ÆËãÕæ½üµã½Ç
+	// è®¡ç®—çœŸè¿‘ç‚¹è§’
 	//double vk = atan2((sqrt(1 - eph->e * eph->e) / (1 - eph->e * sin(Ek))), ((cos(Ek) - eph->e) / (1 - eph->e * cos(Ek))));
 	double vk = atan2((sqrt(1 - eph->e * eph->e)*sin(Ek) ), ((cos(Ek) - eph->e)));
 
-	// ¼ÆËãÉý½»µã½Ç¾à
+	// è®¡ç®—å‡äº¤ç‚¹è§’è·
 	double fi_k = vk + eph->omega;
 
-	// ¼ÆËã¶þ½×µ÷ºÍ¸ÄÕýÊý
-	// ¼ÆËãÉý½»µã½Ç¾à¸ÄÕýÊý
+	// è®¡ç®—äºŒé˜¶è°ƒå’Œæ”¹æ­£æ•°
+	// è®¡ç®—å‡äº¤ç‚¹è§’è·æ”¹æ­£æ•°
 	double delta_uk = eph->Cus * sin(2 * fi_k) + eph->Cuc * cos(2 * fi_k);
 
-	// ¼ÆËãÏò¾¶¸ÄÕýÊý
+	// è®¡ç®—å‘å¾„æ”¹æ­£æ•°
 	double delta_rk = eph->Crs * sin(2 * fi_k) + eph->Crc * cos(2 * fi_k);
 
-	// ¼ÆËã¹ìµÀÇã½Ç¸ÄÕýÊý
+	// è®¡ç®—è½¨é“å€¾è§’æ”¹æ­£æ•°
 	double delta_ik = eph->Cis * sin(2 * fi_k) + eph->Cic * cos(2 * fi_k);
 
-	// ¼ÆËã¾­¹ý¸ÄÕýµÄÉý½»µã½Ç¾à
+	// è®¡ç®—ç»è¿‡æ”¹æ­£çš„å‡äº¤ç‚¹è§’è·
 	double uk = fi_k + delta_uk;
 
-	// ¼ÆËã¾­¹ý¸ÄÕýµÄÏò¾¶
+	// è®¡ç®—ç»è¿‡æ”¹æ­£çš„å‘å¾„
 	double rk = A * (1 - eph->e * cos(Ek)) + delta_rk;
 
-	// ¼ÆËã¾­¹ý¸ÄÕýµÄ¹ìµÀÇã½Ç
+	// è®¡ç®—ç»è¿‡æ”¹æ­£çš„è½¨é“å€¾è§’
 	double ik = eph->i0 + delta_ik + eph->IDOT * tk;
 
-	// ¼ÆËãÎÀÐÇÔÚ¹ìµÀÆ½ÃæÉÏµÄÎ»ÖÃ
+	// è®¡ç®—å«æ˜Ÿåœ¨è½¨é“å¹³é¢ä¸Šçš„ä½ç½®
 	double xk1 = rk * cos(uk);
 	double yk1 = rk * sin(uk);
 
-	// ¼ÆËã¸ÄÕýºóµÄÉý½»µã³à¾­
+	// è®¡ç®—æ”¹æ­£åŽçš„å‡äº¤ç‚¹èµ¤ç»
 	double OMEGA_k = eph->OMEGA + (eph->OMEGA_dot - OMEGA_e_dot_GPS) * tk - OMEGA_e_dot_GPS * eph->TOE.SecOfWeek;
 
-	// ¼ÆËãÔÚµØ¹Ì×ø±êÏµÏÂµÄÎ»ÖÃ
+	// è®¡ç®—åœ¨åœ°å›ºåæ ‡ç³»ä¸‹çš„ä½ç½®
 	Mid->SatPos[0] = xk1 * cos(OMEGA_k) - yk1 * cos(ik) * sin(OMEGA_k);
 	Mid->SatPos[1] = xk1 * sin(OMEGA_k) + yk1 * cos(ik) * cos(OMEGA_k);
 	Mid->SatPos[2] = yk1 * sin(ik);
 
 
-	//GPSÖÓ²î¸ÄÕý
+	//GPSé’Ÿå·®æ”¹æ­£
 	double F = -2 * sqrt(mu_GPS) / (CLIGHT*CLIGHT);
 	double delta_t = F * eph->e * eph->sqrt_A * sin(Ek);
 	Mid->SatClkOft += delta_t;
 
-	//GPSÖÓËÙ¼ÆËã
+	//GPSé’Ÿé€Ÿè®¡ç®—
 	double delta_tr_dot = F * eph->e * eph->sqrt_A * cos(Ek) * (n / (1 - eph->e * cos(Ek)));
 	Mid->SatClkSft += delta_tr_dot;
 
-	/******************************************GPSÔË¶¯ËÙ¶È½âËã*******************************************************************/
+	/******************************************GPSè¿åŠ¨é€Ÿåº¦è§£ç®—*******************************************************************/
 	double Ek_dot = n / (1 - eph->e * cos(Ek));
 	double fi_k_dot = sqrt(1 - eph->e * eph->e) * Ek_dot / (1 - eph->e * cos(Ek));
 	double uk_dot = 2 * (eph->Cus * cos(2 * fi_k) - eph->Cuc * sin(2 * fi_k)) * fi_k_dot + fi_k_dot;
@@ -203,24 +203,24 @@ int CompGPSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* geph, SATMIDRES
 }
 
 /******************************************************************************************
-	º¯ÊýÃû³Æ£ºCompBDSSatPVT
+	å‡½æ•°åç§°ï¼šCompBDSSatPVT
 
-	º¯ÊýÄ¿µÄ£º¼ÆËãGPSÎÀÐÇµÄÎ»ÖÃ¡¢ËÙ¶È¡¢ÖÓ²î¡¢ÖÓËÙ£¨º¬Ïà¶ÔÂÛ¸ÄÕý£©
+	å‡½æ•°ç›®çš„ï¼šè®¡ç®—GPSå«æ˜Ÿçš„ä½ç½®ã€é€Ÿåº¦ã€é’Ÿå·®ã€é’Ÿé€Ÿï¼ˆå«ç›¸å¯¹è®ºæ”¹æ­£ï¼‰
 
-	×¢ÒâÊÂÏî£º
-		1.ÐÇÀú¹ýÆÚÅÐ¶Ï£¬ÐÇÀú½¡¿µ±ê¼ÇSVHealthÊÇ·ñÎª0£¬Èç¹û¹ýÆÚ»òÕß²»½¡¿µ£¬·µ»Øfalse£¬·ñÔò·µ»Øtrue£»
-		2.×¢ÒâBDSÐÇÀúµÄ²Î¿¼Ê±¼äÎªBDT£¬GPST-BDT=14s
-		3.¼ÆËã³É¹¦£¬Mid->valid=true;
+	æ³¨æ„äº‹é¡¹ï¼š
+		1.æ˜ŸåŽ†è¿‡æœŸåˆ¤æ–­ï¼Œæ˜ŸåŽ†å¥åº·æ ‡è®°SVHealthæ˜¯å¦ä¸º0ï¼Œå¦‚æžœè¿‡æœŸæˆ–è€…ä¸å¥åº·ï¼Œè¿”å›žfalseï¼Œå¦åˆ™è¿”å›žtrueï¼›
+		2.æ³¨æ„BDSæ˜ŸåŽ†çš„å‚è€ƒæ—¶é—´ä¸ºBDTï¼ŒGPST-BDT=14s
+		3.è®¡ç®—æˆåŠŸï¼ŒMid->valid=true;
 
-	ÊäÈë²ÎÊý£º
-		prn    ÎÀÐÇµÄprnºÅ
-		sys    ÎÀÐÇÏµÍ³£¨GPS/BDS£©
-		t      ÎÀÐÇÐÅºÅ·¢ÉäÊ±¼ä
-		beph   BDSÎÀÐÇÐÇÀú
-		Mid    ÖÐ¼ä±äÁ¿
+	è¾“å…¥å‚æ•°ï¼š
+		prn    å«æ˜Ÿçš„prnå·
+		sys    å«æ˜Ÿç³»ç»Ÿï¼ˆGPS/BDSï¼‰
+		t      å«æ˜Ÿä¿¡å·å‘å°„æ—¶é—´
+		beph   BDSå«æ˜Ÿæ˜ŸåŽ†
+		Mid    ä¸­é—´å˜é‡
 
-	Êä³ö²ÎÊý£º
-		GPSÎÀÐÇµÄÎ»ÖÃ¡¢ËÙ¶È¡¢ÖÓ²î¡¢ÖÓËÙ£¨º¬Ïà¶ÔÂÛ¸ÄÕý£©
+	è¾“å‡ºå‚æ•°ï¼š
+		GPSå«æ˜Ÿçš„ä½ç½®ã€é€Ÿåº¦ã€é’Ÿå·®ã€é’Ÿé€Ÿï¼ˆå«ç›¸å¯¹è®ºæ”¹æ­£ï¼‰
 *********************************************************************************************/
 int CompBDSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* beph, SATMIDRES* Mid) {
 	const GPSEPH* eph = beph + prn - 1;
@@ -235,25 +235,25 @@ int CompBDSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* beph, SATMIDRES
 
 	GPSTIME BTOE = eph->TOE;
 
-	// ¼ÆËã¹ìµÀ³¤°ëÖá
+	// è®¡ç®—è½¨é“é•¿åŠè½´
 	double A = eph->sqrt_A * eph->sqrt_A;
 
-	// ¼ÆËãÆ½¾ùÔËËã½ÇËÙ¶È
+	// è®¡ç®—å¹³å‡è¿ç®—è§’é€Ÿåº¦
 	double n0 = sqrt(mu_BDS / (A * A * A));
-	// ¼ÆËãÏà¶ÔÓÚÐÇÀú²Î¿¼ÀúÔªµÄÊ±¼ä
+	// è®¡ç®—ç›¸å¯¹äºŽæ˜ŸåŽ†å‚è€ƒåŽ†å…ƒçš„æ—¶é—´
 	double tk = GetDiffTime(&BT, &BTOE);
 	if (fabs(tk) > 3900.0 || eph->SVhealth != 0 || eph->PRN == 0) {
 		Mid->Valid = false;
 		return 0;
 	}
 
-	// ¶ÔÆ½¾ùÔË¶¯½ÇËÙ¶È½øÐÐ¸ÄÕý
+	// å¯¹å¹³å‡è¿åŠ¨è§’é€Ÿåº¦è¿›è¡Œæ”¹æ­£
 	double n = n0 + eph->deltaN;
 
-	// ¼ÆËãÆ½½üµã½Ç
+	// è®¡ç®—å¹³è¿‘ç‚¹è§’
 	double Mk = eph->M0 + n * tk;
 
-	// ¼ÆËãÆ«½üµã½Ç£¨×¢Òâ£º¼ÓÉÏÑ­»·´ÎÊý£©
+	// è®¡ç®—åè¿‘ç‚¹è§’ï¼ˆæ³¨æ„ï¼šåŠ ä¸Šå¾ªçŽ¯æ¬¡æ•°ï¼‰
 	double Ek = Mk;
 	double Ek_ref = Mk;
 	for (int i = 0; i < 10; i++) {
@@ -265,33 +265,33 @@ int CompBDSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* beph, SATMIDRES
 		}
 	}
 
-	// ¼ÆËãÕæ½üµã½Ç
+	// è®¡ç®—çœŸè¿‘ç‚¹è§’
 	//double vk = atan2((sqrt(1 - eph->e * eph->e) / (1 - eph->e * sin(Ek))), ((cos(Ek) - eph->e) / (1 - eph->e * cos(Ek))));
 	double vk = atan2((sqrt(1 - eph->e * eph->e)*sin(Ek)), ((cos(Ek) - eph->e)));
 
-	// ¼ÆËãÉý½»µã½Ç¾à
+	// è®¡ç®—å‡äº¤ç‚¹è§’è·
 	double fi_k = vk + eph->omega;
 
-	// ¼ÆËã¶þ½×µ÷ºÍ¸ÄÕýÊý
-	// ¼ÆËãÉý½»µã½Ç¾à¸ÄÕýÊý
+	// è®¡ç®—äºŒé˜¶è°ƒå’Œæ”¹æ­£æ•°
+	// è®¡ç®—å‡äº¤ç‚¹è§’è·æ”¹æ­£æ•°
 	double delta_uk = eph->Cus * sin(2 * fi_k) + eph->Cuc * cos(2 * fi_k);
 
-	// ¼ÆËãÏò¾¶¸ÄÕýÊý
+	// è®¡ç®—å‘å¾„æ”¹æ­£æ•°
 	double delta_rk = eph->Crs * sin(2 * fi_k) + eph->Crc * cos(2 * fi_k);
 
-	// ¼ÆËã¹ìµÀÇã½Ç¸ÄÕýÊý
+	// è®¡ç®—è½¨é“å€¾è§’æ”¹æ­£æ•°
 	double delta_ik = eph->Cis * sin(2 * fi_k) + eph->Cic * cos(2 * fi_k);
 
-	// ¼ÆËã¾­¹ý¸ÄÕýµÄÉý½»µã½Ç¾à
+	// è®¡ç®—ç»è¿‡æ”¹æ­£çš„å‡äº¤ç‚¹è§’è·
 	double uk = fi_k + delta_uk;
 
-	// ¼ÆËã¾­¹ý¸ÄÕýµÄÏò¾¶
+	// è®¡ç®—ç»è¿‡æ”¹æ­£çš„å‘å¾„
 	double rk = A * (1 - eph->e * cos(Ek)) + delta_rk;
 
-	// ¼ÆËã¾­¹ý¸ÄÕýµÄ¹ìµÀÇã½Ç
+	// è®¡ç®—ç»è¿‡æ”¹æ­£çš„è½¨é“å€¾è§’
 	double ik = eph->i0 + delta_ik + eph->IDOT * tk;
 
-	// ¼ÆËãÎÀÐÇÔÚ¹ìµÀÆ½ÃæÉÏµÄÎ»ÖÃ
+	// è®¡ç®—å«æ˜Ÿåœ¨è½¨é“å¹³é¢ä¸Šçš„ä½ç½®
 	double xk = rk * cos(uk);
 	double yk = rk * sin(uk);
 
@@ -305,7 +305,7 @@ int CompBDSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* beph, SATMIDRES
 	double xk1_dot = rk_dot * cos(uk) - rk * uk_dot * sin(uk);
 	double yk1_dot = rk_dot * sin(uk) + rk * uk_dot * cos(uk);
 
-	// Éý½»µã³à¾­
+	// å‡äº¤ç‚¹èµ¤ç»
 	if ((prn >= 1 && prn <= 5) || (prn >= 59 && prn <= 63)) {
 		double OMEGA_k = eph->OMEGA + eph->OMEGA_dot * tk - OMEGA_e_dot_BDS * eph->TOE.SecOfWeek;
 		
@@ -319,7 +319,7 @@ int CompBDSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* beph, SATMIDRES
 		Mid->SatPos[1] = POS(1);
 		Mid->SatPos[2] = POS(2);
 
-		/******************************************GEOËÙ¶È½âËã******************************************/
+		/******************************************GEOé€Ÿåº¦è§£ç®—******************************************/
 		Matrix<double, 3, 4> R;
 		R <<
 			cos(OMEGA_k), -sin(OMEGA_k) * cos(ik), -(xk * sin(OMEGA_k) + yk * cos(OMEGA_k) * cos(ik)), yk* sin(OMEGA_k)* sin(ik),
@@ -338,10 +338,10 @@ int CompBDSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* beph, SATMIDRES
 	}
 	
 	else {
-		// ¼ÆËã¸ÄÕýºóµÄÉý½»µã³à¾­
+		// è®¡ç®—æ”¹æ­£åŽçš„å‡äº¤ç‚¹èµ¤ç»
 		double OMEGA_k = eph->OMEGA + (eph->OMEGA_dot - OMEGA_e_dot_BDS) * tk - OMEGA_e_dot_BDS * eph->TOE.SecOfWeek;
 
-		// ¼ÆËãÔÚµØ¹Ì×ø±êÏµÏÂµÄÎ»ÖÃ
+		// è®¡ç®—åœ¨åœ°å›ºåæ ‡ç³»ä¸‹çš„ä½ç½®
 		Mid->SatPos[0] = xk * cos(OMEGA_k) - yk * cos(ik) * sin(OMEGA_k);
 		Mid->SatPos[1] = xk * sin(OMEGA_k) + yk * cos(ik) * cos(OMEGA_k);
 		Mid->SatPos[2] = yk * sin(ik);
@@ -364,14 +364,14 @@ int CompBDSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* beph, SATMIDRES
 		Mid->SatVel[2] = V(2);
 	}
 
-	//BDSÖÓ²î¸ÄÕý
+	//BDSé’Ÿå·®æ”¹æ­£
 	double F = -2 * sqrt(mu_BDS) / (CLIGHT * CLIGHT);
 	double delta_t = F * eph->e * eph->sqrt_A * sin(Ek);
 	double k1_3 = FG1_BDS * FG1_BDS / (FG3_BDS * FG3_BDS);
 	double delta_tsv = k1_3 * eph->tgd1 / (1 - k1_3);
 	Mid->SatClkOft = Mid->SatClkOft + delta_t + delta_tsv;
 
-	//BDSÖÓËÙ¼ÆËã
+	//BDSé’Ÿé€Ÿè®¡ç®—
 	double delta_tr_dot = F * eph->e * eph->sqrt_A * cos(Ek) * (n / (1 - eph->e * cos(Ek)));
 	Mid->SatClkSft += delta_tr_dot;
 
@@ -384,21 +384,21 @@ int CompBDSSatPVT(const int prn, const GPSTIME* t, const GPSEPH* beph, SATMIDRES
 }
 
 /******************************************************************************************
-	º¯ÊýÃû³Æ£ºEarthRotationCorrection
+	å‡½æ•°åç§°ï¼šEarthRotationCorrection
 
-	º¯ÊýÄ¿µÄ£ºµØÇò×Ô×ª¸ÄÕý£ºÎÀÐÇÐÅºÅ´Ó·¢Éäµ½½ÓÊÜÐèÒª´«²¥Ò»¶ÎÊ±¼ä£¬Õâ¶ÎÊ±¼äµØÇò´æÔÚ×Ô×ª¡£
-			Èç¹û²»×ö¸ÄÕý£¬·¢ÉäÊ±¿ÌµÄÎÀÐÇ×ø±êºÍ½ÓÊÕÊ±¿ÌµÄÎÀÐÇ×ø±ê²»Ò»ÖÂ£¬´æÔÚÎó²î
+	å‡½æ•°ç›®çš„ï¼šåœ°çƒè‡ªè½¬æ”¹æ­£ï¼šå«æ˜Ÿä¿¡å·ä»Žå‘å°„åˆ°æŽ¥å—éœ€è¦ä¼ æ’­ä¸€æ®µæ—¶é—´ï¼Œè¿™æ®µæ—¶é—´åœ°çƒå­˜åœ¨è‡ªè½¬ã€‚
+			å¦‚æžœä¸åšæ”¹æ­£ï¼Œå‘å°„æ—¶åˆ»çš„å«æ˜Ÿåæ ‡å’ŒæŽ¥æ”¶æ—¶åˆ»çš„å«æ˜Ÿåæ ‡ä¸ä¸€è‡´ï¼Œå­˜åœ¨è¯¯å·®
 
-	×¢ÒâÊÂÏî£º
-		1.ÐÇÀú¹ýÆÚÅÐ¶Ï£¬ÐÇÀú½¡¿µ±ê¼ÇSVHealthÊÇ·ñÎª0£¬Èç¹û¹ýÆÚ»òÕß²»½¡¿µ£¬·µ»Øfalse£¬·ñÔò·µ»Øtrue£»
-		2.×¢ÒâBDSÐÇÀúµÄ²Î¿¼Ê±¼äÎªBDT£¬GPST-BDT=14s
-		3.¼ÆËã³É¹¦£¬Mid->valid=true;
+	æ³¨æ„äº‹é¡¹ï¼š
+		1.æ˜ŸåŽ†è¿‡æœŸåˆ¤æ–­ï¼Œæ˜ŸåŽ†å¥åº·æ ‡è®°SVHealthæ˜¯å¦ä¸º0ï¼Œå¦‚æžœè¿‡æœŸæˆ–è€…ä¸å¥åº·ï¼Œè¿”å›žfalseï¼Œå¦åˆ™è¿”å›žtrueï¼›
+		2.æ³¨æ„BDSæ˜ŸåŽ†çš„å‚è€ƒæ—¶é—´ä¸ºBDTï¼ŒGPST-BDT=14s
+		3.è®¡ç®—æˆåŠŸï¼ŒMid->valid=true;
 
-	ÊäÈë²ÎÊý£º
-		ÎÀÐÇµÄÎ»ÖÃºÍËÙ¶È
+	è¾“å…¥å‚æ•°ï¼š
+		å«æ˜Ÿçš„ä½ç½®å’Œé€Ÿåº¦
 
-	Êä³ö²ÎÊý£º
-		¾­¹ýµØÇò×Ô´«¸ÄÕýºóÎÀÐÇµÄÎ»ÖÃºÍËÙ¶È
+	è¾“å‡ºå‚æ•°ï¼š
+		ç»è¿‡åœ°çƒè‡ªä¼ æ”¹æ­£åŽå«æ˜Ÿçš„ä½ç½®å’Œé€Ÿåº¦
 *********************************************************************************************/
 void EarthRotationCorrection(SATMIDRES* Mid, double UserPos[3], double Omegae) {
 	double rou, dt;
@@ -429,40 +429,40 @@ void EarthRotationCorrection(SATMIDRES* Mid, double UserPos[3], double Omegae) {
 }
 
 /******************************************************************************************
-	º¯ÊýÃû³Æ£ºSatPVTCalculation
+	å‡½æ•°åç§°ï¼šSatPVTCalculation
 
-	º¯ÊýÄ¿µÄ£º¼ÆËãÄ³ÀúÔª¹Û²âÖÐËùÓÐ¹Û²âµ½µÄÎÀÐÇµÄÎ»ÖÃ
+	å‡½æ•°ç›®çš„ï¼šè®¡ç®—æŸåŽ†å…ƒè§‚æµ‹ä¸­æ‰€æœ‰è§‚æµ‹åˆ°çš„å«æ˜Ÿçš„ä½ç½®
 
-	×¢ÒâÊÂÏî£º1.ÎÀÐÇÐÅºÅ·¢ÉäÊ±¿Ì=½ÓÊÕ»ú½ÓÊÕÊ±¿Ì-P/C-ÎÀÐÇÖÓ²î
+	æ³¨æ„äº‹é¡¹ï¼š1.å«æ˜Ÿä¿¡å·å‘å°„æ—¶åˆ»=æŽ¥æ”¶æœºæŽ¥æ”¶æ—¶åˆ»-P/C-å«æ˜Ÿé’Ÿå·®
 
-	ÊäÈë²ÎÊý£º
-		Ä³ÀúÔªµÄ¹Û²âÖµºÍÎÀÐÇµÄÐÇÀú
+	è¾“å…¥å‚æ•°ï¼š
+		æŸåŽ†å…ƒçš„è§‚æµ‹å€¼å’Œå«æ˜Ÿçš„æ˜ŸåŽ†
 
-	Êä³ö²ÎÊý£º
-		ÎÀÐÇµÄÎ»ÖÃ¡¢ËÙ¶È¡¢ÖÓ²î¡¢ÖÓËÙ
+	è¾“å‡ºå‚æ•°ï¼š
+		å«æ˜Ÿçš„ä½ç½®ã€é€Ÿåº¦ã€é’Ÿå·®ã€é’Ÿé€Ÿ
 *********************************************************************************************/
 void SatPVTCalculation(GPSEPH* geph, GPSEPH* beph, EPOCHOBSDATA* obs, SPPPOS* UserPos/*double UserPos[3]*/) {	
-	GPSTIME tr = obs->Time;  // ½ÓÊÕ»úÖÓµÄ±íÃæÊ±£¬½ÓÊÕ»ú½ÓÊÕµ½ÎÀÐÇÐÅºÅµÄÊ±¿Ì
-	GPSTIME ts;              // ÎÀÐÇÐÅºÅ·¢ÉäÊ±¿Ì
+	GPSTIME tr = obs->Time;  // æŽ¥æ”¶æœºé’Ÿçš„è¡¨é¢æ—¶ï¼ŒæŽ¥æ”¶æœºæŽ¥æ”¶åˆ°å«æ˜Ÿä¿¡å·çš„æ—¶åˆ»
+	GPSTIME ts;              // å«æ˜Ÿä¿¡å·å‘å°„æ—¶åˆ»
 	double blh[3];
 	double R, F;
 
 	for (int i = 0; i < obs->SatNum; i++) {
-		SATMIDRES* Mid = obs->SatPVT + i;   //MidÖ¸Ïòµ±Ç°ÎÀÐÇµÄPVT¼ÆËã½á¹û½á¹¹Ìå
+		SATMIDRES* Mid = obs->SatPVT + i;   //MidæŒ‡å‘å½“å‰å«æ˜Ÿçš„PVTè®¡ç®—ç»“æžœç»“æž„ä½“
 
 		ts.Week = tr.Week;
-		ts.SecOfWeek = tr.SecOfWeek - obs->SatObs[i].P[0] / CLIGHT; //µÚÒ»´ÎÃ»ÓÐÎÀÐÇÖÓ²î
+		ts.SecOfWeek = tr.SecOfWeek - obs->SatObs[i].P[0] / CLIGHT; //ç¬¬ä¸€æ¬¡æ²¡æœ‰å«æ˜Ÿé’Ÿå·®
 
 		if (!CompSatClkOff(obs->SatObs[i].Prn,obs->SatObs[i].System,&ts,geph,beph,Mid)) {
 			Mid->Valid = false;
 			continue;
 		}
-		ts.SecOfWeek = tr.SecOfWeek - obs->SatObs[i].P[0] / CLIGHT - obs->SatPVT[i].SatClkOft; //Ïàµ±ÓÚÊÇÊý×éµÄ±äÁ¿£¬ÓÃµã.
-		if (!CompSatClkOff(obs->SatObs[i].Prn, obs->SatObs[i].System, &ts, geph, beph, Mid)) {   // µü´ú¼ÆËãÒ»´Î½øÐÐÐÞÕý
+		ts.SecOfWeek = tr.SecOfWeek - obs->SatObs[i].P[0] / CLIGHT - obs->SatPVT[i].SatClkOft; //ç›¸å½“äºŽæ˜¯æ•°ç»„çš„å˜é‡ï¼Œç”¨ç‚¹.
+		if (!CompSatClkOff(obs->SatObs[i].Prn, obs->SatObs[i].System, &ts, geph, beph, Mid)) {   // è¿­ä»£è®¡ç®—ä¸€æ¬¡è¿›è¡Œä¿®æ­£
 			Mid->Valid = false;
 			continue;
 		}
-		ts.SecOfWeek = tr.SecOfWeek - obs->SatObs[i].P[0] / CLIGHT - obs->SatPVT[i].SatClkOft; //Ïàµ±ÓÚÊÇÊý×éµÄ±äÁ¿£¬ÓÃµã.
+		ts.SecOfWeek = tr.SecOfWeek - obs->SatObs[i].P[0] / CLIGHT - obs->SatPVT[i].SatClkOft; //ç›¸å½“äºŽæ˜¯æ•°ç»„çš„å˜é‡ï¼Œç”¨ç‚¹.
 
 		if (obs->SatObs[i].System == GPS) {
 			if (!CompGPSSatPVT(obs->SatObs[i].Prn,&ts,geph,Mid)) {
@@ -487,7 +487,7 @@ void SatPVTCalculation(GPSEPH* geph, GPSEPH* beph, EPOCHOBSDATA* obs, SPPPOS* Us
 
 		Mid->Valid = true;
 
-		// ¼ÆËãÎÀÐÇµÄ¸ß¶È½ÇºÍ¶ÔÁ÷²ã¸ÄÕý
+		// è®¡ç®—å«æ˜Ÿçš„é«˜åº¦è§’å’Œå¯¹æµå±‚æ”¹æ­£
 		if (obs->SatObs[i].System == GPS) {
 			R = R_WGS84;
 			F = F_WGS84;

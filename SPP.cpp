@@ -17,7 +17,7 @@ using namespace std;
 		
 *********************************************************************************************/
 
-bool SPP(GPSEPH* geph, GPSEPH* beph, SPPPOS *UserPos, EPOCHOBSDATA* obs) {
+bool SPP(GPSEPH* geph, GPSEPH* beph, SPPPOS *UserPos, EPOCHOBSDATA* obs, double elevationThreshold) {
 	int i = 0;
 	// 设定初始位置XR，设初始的接收机钟差RcvClk
 	double blh[3], dPos[3],Rou;
@@ -61,6 +61,9 @@ bool SPP(GPSEPH* geph, GPSEPH* beph, SPPPOS *UserPos, EPOCHOBSDATA* obs) {
 			if (obs->SatPVT[j].Valid == false || obs->SatObs[j].valid == false) {
 				continue;
 			}
+			if (i > 0 && obs->SatPVT[j].Elevation < elevationThreshold) {
+				continue;
+			}
 
 			// 保留初始位置，作为后面的计算的参考值
 			for (int k = 0; k < 3; k++) {
@@ -90,11 +93,9 @@ bool SPP(GPSEPH* geph, GPSEPH* beph, SPPPOS *UserPos, EPOCHOBSDATA* obs) {
 			else continue;
 			n++;
 		}
-		int dim = 5;
-		//if (GPSNum == 0 || BDSNum == 0) {
-		//	dim = 4;
-		//}
-		if (n < 4) {
+		int dim = (GPSNum > 0 && BDSNum > 0) ? 5 : 4;
+		if (n < dim)
+		{
 			return false;
 		}
 		BTB = B.block(0, 0, n, 5).transpose() * B.block(0, 0, n, 5);
@@ -108,15 +109,10 @@ bool SPP(GPSEPH* geph, GPSEPH* beph, SPPPOS *UserPos, EPOCHOBSDATA* obs) {
 				BTB(3, k) = BTB(4, k);
 			}
 			BTW(3, 0) = BTW(4, 0);
-			dim--;
 			for (int k = 0; k < n; k++) {
 				B(k, 3) = B(k, 4);
 			}
 		}
-		else if (BDSNum == 0) {
-			dim--;
-		}
-		else;
 
 		X = BTB.block(0, 0, dim, dim).inverse() * BTW.block(0, 0, dim, 1);
 
@@ -192,7 +188,7 @@ bool SPP(GPSEPH* geph, GPSEPH* beph, SPPPOS *UserPos, EPOCHOBSDATA* obs) {
 	输出参数：
 
 *********************************************************************************************/
-void SPV(EPOCHOBSDATA* obs, SPPPOS* UserPos) {
+void SPV(EPOCHOBSDATA* obs, SPPPOS* UserPos, double elevationThreshold) {
 	int n;
 	double dPos[3],Rou,Rou_dot;
 	
@@ -208,6 +204,9 @@ void SPV(EPOCHOBSDATA* obs, SPPPOS* UserPos) {
 	int m = 0;
 	for (int i = 0; i < obs->SatNum; i++) {
 		if (obs->SatPVT[i].Valid == false || obs->SatObs[i].valid == false) {
+			continue;
+		}
+		if (obs->SatPVT[i].Elevation < elevationThreshold) {
 			continue;
 		}
 
@@ -233,6 +232,10 @@ void SPV(EPOCHOBSDATA* obs, SPPPOS* UserPos) {
 		m++;
 	}
 	if (m < 4) {
+		UserPos->Vel[0] = 0.0;
+		UserPos->Vel[1] = 0.0;
+		UserPos->Vel[2] = 0.0;
+		UserPos->SigmaVel = 0.0;
 		return;
 	}
 	BTPB = B.block(0,0,m,4).transpose() * B.block(0, 0, m, 4);
@@ -241,7 +244,12 @@ void SPV(EPOCHOBSDATA* obs, SPPPOS* UserPos) {
 	
 	// 计算残差
 	v = B.block(0, 0, m, 4) * X - w.head(m);
-	UserPos->SigmaVel = sqrt((v.transpose() * v)(0, 0) / (m - 4));
+	if (m == 4) {
+		UserPos->SigmaVel = 0.0;
+	}
+	else {
+		UserPos->SigmaVel = sqrt((v.transpose() * v)(0, 0) / (m - 4));
+	}
 	Q = BTPB.inverse();
 	UserPos->Dxx = UserPos->SigmaVel * Q;
 

@@ -14,52 +14,77 @@ using namespace std;
 
 int main()
 {
-    FILE* fp = nullptr;
-    SOCKET NetGPS;
+    ROVERCFGINFO config{};
 
-    unsigned char Buff[MAXRAWLEN];
+    if (!ReadRTKConfigInfo("RTKConfig.ini", &config))
+    {
+        cout << "错误：无法读取RTK配置文件" << endl;
+        return 1;
+    }
+
+    if (config.PositionMode == POSITION_MODE_RTK)
+    {
+        cout << "当前定位模式：RTK" << endl;
+        if (config.IsFileData == INPUT_MODE_FILE)
+        {
+            cout << "基站文件：" << config.BasObsDatFile << endl;
+            cout << "流动站文件：" << config.RovObsDatFile << endl;
+        }
+        else
+        {
+            cout << "基站网络：" << config.BasNetIP << ":" << config.BasNetPort << endl;
+            cout << "流动站网络：" << config.RovNetIP << ":" << config.RovNetPort << endl;
+        }
+
+        cout << "RTK解算流程尚未实现，请先将PositionMode设置为1运行单点定位。" << endl;
+        return 1;
+    }
+
+    cout << "当前定位模式：单点定位SPP" << endl;
+    const double elevationThreshold = config.ElevThreshold * Deg2Rad;
+
+    FILE* fp = nullptr;
+    SOCKET NetGPS = INVALID_SOCKET;
+
+    unsigned char Buff[MAXRAWLEN]{};
     int Len = 0;
     int LenRead = 0;
     int val = 0;
 
     EPOCHOBSDATA Obs;
-    GPSEPH GpsEph[MAXGPSNUM];
-    GPSEPH BdsEph[MAXBDSNUM];
+    GPSEPH GpsEph[MAXGPSNUM]{};
+    GPSEPH BdsEph[MAXBDSNUM]{};
 
-    memset(GpsEph, 0, sizeof(GpsEph));
-    memset(BdsEph, 0, sizeof(BdsEph));
-
-    SPPPOS UserPos;
-    memset(&UserPos, 0, sizeof(UserPos));
+    SPPPOS UserPos{};
 
     int totalEpochCount = 0;
     int successfulSPPCount = 0;
+    bool inputError = false;
 
-    ofstream flog;
-
-    if (FILEMODE == 1)
+    ofstream flog(config.ResFile, ios::out);
+    if (!flog.is_open())
     {
-        flog.open("oem.log", ios::out);
+        cout << "错误：无法创建结果文件：" << config.ResFile << endl;
+        return 1;
+    }
 
-        if (!flog.is_open())
+    if (config.IsFileData == INPUT_MODE_FILE)
+    {
+        if ((fp = fopen(config.SPPObsDatFile, "rb")) == NULL)
         {
-            cout << "错误：无法创建 oem.log" << endl;
-            return 0;
-        }
-
-        if ((fp = fopen("E:\\STUDY\\Sophomore2\\卫星算法程序设计\\OEM719原始数据\\oem719-202603111200.bin", "rb")) == NULL)
-        {
-            cout << "错误：无法打开文件" << endl;
+            cout << "错误：无法打开单点定位观测文件："
+                << config.SPPObsDatFile << endl;
             flog.close();
-            return 0;
+            return 1;
         }
     }
     else
     {
-        if (OpenSocket(NetGPS, "47.114.134.129", 7190) == false)
+        if (OpenSocket(NetGPS, config.RovNetIP, config.RovNetPort) == false)
         {
             cout << "错误：无法打开网络连接" << endl;
-            return 0;
+            flog.close();
+            return 1;
         }
     }
 
@@ -67,20 +92,27 @@ int main()
 
     do
     {
-        if (FILEMODE == 1)
+        if (config.IsFileData == INPUT_MODE_FILE)
         {
+            if (Len >= MAXRAWLEN)
+            {
+                cout << "错误：输入缓冲区已满，无法继续读取文件。" << endl;
+                inputError = true;
+                break;
+            }
+
             LenRead = fread(Buff + Len, sizeof(unsigned char), MAXRAWLEN - Len, fp);
 
-            if (LenRead <= 0)
+            if (LenRead == 0)
             {
                 if (feof(fp) != 0)
                 {
                     break;
                 }
-                else
-                {
-                    continue;
-                }
+
+                cout << "错误：读取观测文件失败。" << endl;
+                inputError = true;
+                break;
             }
 
             Len += LenRead;
@@ -88,6 +120,13 @@ int main()
         else
         {
             Sleep(980);
+
+            if (Len >= MAXRAWLEN)
+            {
+                cout << "错误：输入缓冲区已满，无法继续接收网络数据。" << endl;
+                inputError = true;
+                break;
+            }
 
             LenRead = recv(NetGPS, (char*)Buff + Len, MAXRAWLEN - Len, 0);
 
@@ -101,7 +140,10 @@ int main()
             }
             else
             {
-                continue;
+                cout << "错误：接收网络数据失败，错误码："
+                    << WSAGetLastError() << endl;
+                inputError = true;
+                break;
             }
         }
 
@@ -157,7 +199,7 @@ int main()
             //        << "deg"
             //        << endl;
 
-            //    if (FILEMODE == 1)
+            //    if (config.IsFileData == 1)
             //    {
             //        flog
             //            << sysChar << setw(2) << setfill('0') << Obs.SatObs[i].Prn << setfill(' ')
@@ -176,11 +218,12 @@ int main()
             //            << endl;
             //    }
             //}
-            if (FILEMODE == 1)
+            if (flog.is_open())
             {
                 for (int i = 0; i < Obs.SatNum; i++)
                 {
-                    if (!Obs.SatObs[i].valid || !Obs.SatPVT[i].Valid)
+                    if (!Obs.SatObs[i].valid || !Obs.SatPVT[i].Valid ||
+                        Obs.SatPVT[i].Elevation < elevationThreshold)
                     {
                         continue;
                     }
@@ -215,11 +258,11 @@ int main()
 
             UserPos.Time = Obs.Time;
 
-            if (SPP(GpsEph, BdsEph, &UserPos, &Obs))
+            if (SPP(GpsEph, BdsEph, &UserPos, &Obs, elevationThreshold))
             {
                 successfulSPPCount++;
 
-                SPV(&Obs, &UserPos);
+                SPV(&Obs, &UserPos, elevationThreshold);
 
                 double blh[3] = { 0.0, 0.0, 0.0 };
                 XYZToBLH(UserPos.Pos, blh, R_WGS84, F_WGS84);
@@ -268,7 +311,7 @@ int main()
                     << " Sats:" << setw(3) << Obs.SatNum
                     << endl;
 
-                if (FILEMODE == 1)
+                if (flog.is_open())
                 {
                     flog
                         << "SPP: "
@@ -306,7 +349,7 @@ int main()
                     << endl
                     << endl;
 
-                if (FILEMODE == 1)
+                if (flog.is_open())
                 {
                     flog
                         << "SPP: "
@@ -321,26 +364,25 @@ int main()
 
     } while (1);
 
-    if (FILEMODE == 1)
+    if (config.IsFileData == INPUT_MODE_FILE)
     {
         if (fp)
         {
             fclose(fp);
         }
-
-        flog << "TOTAL_EPOCH=" << totalEpochCount
-            << " SUCCESS_SPP=" << successfulSPPCount
-            << endl;
-
-        flog.close();
     }
     else
     {
         CloseSocket(NetGPS);
     }
 
+    flog << "TOTAL_EPOCH=" << totalEpochCount
+        << " SUCCESS_SPP=" << successfulSPPCount
+        << endl;
+    flog.close();
+
     cout << "处理结束。总历元数: " << totalEpochCount
         << "，SPP成功数: " << successfulSPPCount << endl;
 
-    return 0;
+    return inputError ? 1 : 0;
 }

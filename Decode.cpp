@@ -150,9 +150,6 @@ int DecodeNovOem7Dat(unsigned char buff[], int& len, EPOCHOBSDATA* obs, GPSEPH g
 			break;
 		}
 
-		if (FILEMODE == 1 && Type == 1) {
-			break;
-		}
 	}
 	// 6.循环结束后，将不足一条消息的剩余字节，拷贝至buff缓冲区的开始处，将len设置为剩余字节数量，并返回给主函数。
 	// 因为一次读取的数据可能刚好是截断在半条消息中间。如果把这部分丢掉，下一次就拼不成完整的消息了

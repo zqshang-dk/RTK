@@ -10,8 +10,11 @@
 
 using namespace Eigen;
 
-#define FILEMODE 0  //1-file 0-ip
-         
+#define POSITION_MODE_SPP 1
+#define POSITION_MODE_RTK 2
+#define INPUT_MODE_NETWORK 0
+#define INPUT_MODE_FILE 1
+
 #define PI                3.1415926535898
 #define CLIGHT            299792458.0
 #define SQR(x)            ((x)*(x))
@@ -150,7 +153,7 @@ struct SATOBSDATA {
 	short Prn;
 	GNSSSYS System;
 	double P[2], L[2], D[2];   //双频
-	double   cn0[2], LockTime[2];
+	double   cn0[2], LockTime[2];  //判断历元间相位数据的连续性，没有发生中断时，locktime(k+1)>=locktime(k)，数据正常，反之有周跳
 	unsigned char half[2];
 	bool valid;
 
@@ -158,8 +161,11 @@ struct SATOBSDATA {
 	{
 		Prn = 0;
 		System = UNKNOWN;
-		for (int i = 0; i < 2; i++)
+		for (int i = 0; i < 2; i++){
 			P[i] = L[i] = D[i] = 0.0;
+			cn0[i] = LockTime[i] = 0.0;
+        	half[i] = 0;
+		}
 		valid = false;
 	}
 };
@@ -193,10 +199,24 @@ struct MWGF {
 	double PIF;
 	int n;    //平滑计数
 
+	double BasLockTime[2]; //保存上一历元基站和流动站的锁定时间
+    double RovLockTime[2]; 
+
+    unsigned char BasParity[2]; // 保存上一历元的奇偶状态
+    unsigned char RovParity[2];
+
 	MWGF() {
 		Prn = n = 0;
 		System = UNKNOWN;
 		MW = GF = PIF = 0.0;
+
+		for (int i = 0; i < 2; i++)
+        {
+            BasLockTime[i] = 0.0;
+            RovLockTime[i] = 0.0;
+            BasParity[i] = 0;
+            RovParity[i] = 0;
+        }
 	}
 };
 
@@ -227,24 +247,31 @@ struct SPPPOS {
 
 struct ROVERCFGINFO   // 配置信息
 {
-	short  IsFileData, RTKProcMode;      // 1=FILE, 0=COM, 1=EKF, 2=LSQ
+	short  PositionMode;                 // 1=SPP, 2=RTK
+	short  IsFileData;                   // 1=文件, 0=网络
+	short  RTKProcMode;                  // 1=EKF, 2=LSQ，仅RTK模式使用
 	int    RovPort, RovBaud;             // COM端口设置
 	char   BasNetIP[20], RovNetIP[20];   // ip address
-	short  BasNetPort, RovNetPort;       // port
+	unsigned short BasNetPort, RovNetPort; // port
 	double CodeNoise, CPNoise;           // 伪距噪声
 	double ElevThreshold;                // 高度角阈值
 	double RatioThres;                   // Ratio检验阈值
 
-	char  BasObsDatFile[256], RovObsDatFile[256];    //  观测数据的文件名
-	char  ResFile[256];            //  结果数据文件名
-
+	char  SPPObsDatFile[256];                         // 单点定位观测文件
+	char  BasObsDatFile[256], RovObsDatFile[256];    // RTK基站和流动站观测文件
+	char  ResFile[256];                              // 结果文件
 
 	ROVERCFGINFO()
 	{
-		IsFileData = RTKProcMode = 1;
+		PositionMode = POSITION_MODE_SPP;
+		IsFileData = INPUT_MODE_FILE;
+		RTKProcMode = 2;
 		RovPort = RovBaud = BasNetPort = RovNetPort = 0;
 		CodeNoise = CPNoise = ElevThreshold = 0.0;
 		RatioThres = 3.0;
+		BasNetIP[0] = RovNetIP[0] = '\0';
+		SPPObsDatFile[0] = BasObsDatFile[0] = RovObsDatFile[0] = '\0';
+		ResFile[0] = '\0';
 	}
 };
 
@@ -313,13 +340,13 @@ struct DDCOBS
 };
 /*  RTK定位的数据定义  */
 struct RAWDAT {
-	EPOCHOBSDATA BasEpk;
-	EPOCHOBSDATA RovEpk;
-	SPPPOS BaseBest;                                // 基站的参考位置
-	SPPPOS RoverBest;                               // 流动站的参考位置
-	SDEPOCHOBS SdObs;
-	DDCOBS DDObs;
-	GPSEPH GpsEph[MAXGPSNUM], BdsEph[MAXBDSNUM];
+	EPOCHOBSDATA BasEpk;   //基站当前观测历元
+	EPOCHOBSDATA RovEpk;   //流动站当前观测历元
+	SPPPOS BaseBest;       // 基站的参考位置SPP结果
+	SPPPOS RoverBest;      // 流动站的参考位置SPP结果
+	SDEPOCHOBS SdObs;      // 站间单差观测
+	DDCOBS DDObs;          // 双差和固定解结果
+	GPSEPH GpsEph[MAXGPSNUM], BdsEph[MAXBDSNUM];  //广播星历
 };
 /* AngleChange.cpp */
 double Degree2Rad(double theta);
@@ -365,6 +392,7 @@ short S2(unsigned char* p);
 unsigned short US2(unsigned char* p);
 
 /* SatPVTCalculation.cpp*/
+double GetDiffTime(GPSTIME *t1, GPSTIME *t2);
 bool CompSatClkOff(const int Prn, const GNSSSYS Sys, const GPSTIME* t,GPSEPH* GPSEph, GPSEPH* BDSEph, SATMIDRES* Mid);
 int CompGPSSatPVT(const int Prn, const GPSTIME* t, const GPSEPH* Eph, SATMIDRES* Mid);
 int CompBDSSatPVT(const int Prn, const GPSTIME* t, const GPSEPH* Eph, SATMIDRES* Mid);
@@ -385,6 +413,18 @@ bool OpenSocket(SOCKET& sock, const char IP[], const unsigned short Port);
 
 /* SPP.cpp */
 //void SatPVTatSignal(GPSEPH* geph, GPSEPH* beph, double UserPos[3], EPOCHOBSDATA* obs);
-bool SPP(GPSEPH* geph, GPSEPH* beph, SPPPOS* UserPos, EPOCHOBSDATA* obs);
-void SPV(EPOCHOBSDATA* obs, SPPPOS* UserPos);
+bool SPP(GPSEPH* geph, GPSEPH* beph, SPPPOS* UserPos,
+	EPOCHOBSDATA* obs, double elevationThreshold);
+void SPV(EPOCHOBSDATA* obs, SPPPOS* UserPos, double elevationThreshold);
+
+
+/* ReadCtrlFile.cpp */
+bool ReadRTKConfigInfo(const char configFile[], ROVERCFGINFO* config);
+
+/* RTK.cpp */
+int GetSynObs(FILE* FBas, FILE* FRov, SOCKET& BasSock, SOCKET& RovSock, RAWDAT* Raw);
+void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHOBS *SDObs);
+void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* Obs);
+void DetRefSat(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* SDObs, DDCOBS* DDObs);
+bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov);
 #endif
