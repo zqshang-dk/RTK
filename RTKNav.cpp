@@ -18,29 +18,208 @@ int main()
 
     if (!ReadRTKConfigInfo("RTKConfig.ini", &config))
     {
-        cout << "错误：无法读取RTK配置文件" << endl;
+        // 配置读取失败
+        cout << "Error: Failed to read RTK configuration." << endl;
         return 1;
     }
 
     if (config.PositionMode == POSITION_MODE_RTK)
     {
-        cout << "当前定位模式：RTK" << endl;
-        if (config.IsFileData == INPUT_MODE_FILE)
+        cout << "Positioning mode: RTK" << endl;
+
+        // 当前RTK.cpp只实现了最小二乘浮点解
+        if (config.RTKProcMode != 2)
         {
-            cout << "基站文件：" << config.BasObsDatFile << endl;
-            cout << "流动站文件：" << config.RovObsDatFile << endl;
-        }
-        else
-        {
-            cout << "基站网络：" << config.BasNetIP << ":" << config.BasNetPort << endl;
-            cout << "流动站网络：" << config.RovNetIP << ":" << config.RovNetPort << endl;
+            cout << "Error: Only least-squares RTK float solutions are supported." << endl;
+            return 1;
         }
 
-        cout << "RTK解算流程尚未实现，请先将PositionMode设置为1运行单点定位。" << endl;
-        return 1;
+        // 当前GetSynObs只支持文件读取
+        if (config.IsFileData != INPUT_MODE_FILE)
+        {
+            cout << "Error: RTK currently supports file input only." << endl;
+            return 1;
+        }
+
+        // 输入文件路径
+        cout << "Base observation file: " << config.BasObsDatFile << endl;
+        cout << "Rover observation file: " << config.RovObsDatFile << endl;
+
+        FILE* FBas = fopen(config.BasObsDatFile, "rb");
+        FILE* FRov = fopen(config.RovObsDatFile, "rb");
+
+        if (FBas == nullptr || FRov == nullptr)
+        {
+            // 观测文件打开失败
+            cout << "Error: Cannot open the base or rover observation file." << endl;
+
+            if (FBas != nullptr)
+            {
+                fclose(FBas);
+            }
+
+            if (FRov != nullptr)
+            {
+                fclose(FRov);
+            }
+
+            return 1;
+        }
+
+        ofstream rtkLog(config.ResFile, ios::out);
+
+        if (!rtkLog.is_open())
+        {
+            // 结果文件创建失败
+            cout << "Error: Cannot create RTK result file: " << config.ResFile << endl;
+            fclose(FBas);
+            fclose(FRov);
+            return 1;
+        }
+
+        // 不能使用memset清空Raw，因为其中包含Eigen对象
+        RAWDAT Raw{};
+
+        SOCKET BasSock = INVALID_SOCKET;
+        SOCKET RovSock = INVALID_SOCKET;
+
+        const double elevationThreshold = config.ElevThreshold * Deg2Rad;
+
+        int totalEpochCount = 0;
+        int floatSuccessCount = 0;
+
+        while (true)
+        {
+            int syncResult = GetSynObs(FBas, FRov, BasSock, RovSock, &Raw);
+
+            // -1表示文件结束或读取失败
+            if (syncResult == -1)
+            {
+                break;
+            }
+
+            // 0表示当前两个历元没有同步成功
+            if (syncResult == 0)
+            {
+                continue;
+            }
+
+            // 只有返回1时，两个历元才是同步的
+            totalEpochCount++;
+
+            // 先对基站和流动站分别进行粗差探测
+            DetectOutlier(&Raw.BasEpk);
+            DetectOutlier(&Raw.RovEpk);
+
+            // 构造站间单差
+            FormSDEpochObs(&Raw.BasEpk, &Raw.RovEpk, &Raw.SdObs);
+
+            // 探测站间单差中的周跳
+            DetectCycleSlip(&Raw.BasEpk, &Raw.RovEpk, &Raw.SdObs);
+
+            // 分别进行基站和流动站SPP
+            bool baseOK = SPP(Raw.GpsEph, Raw.BdsEph, &Raw.BaseBest, &Raw.BasEpk, elevationThreshold);
+
+            bool roverOK = SPP(Raw.GpsEph, Raw.BdsEph, &Raw.RoverBest, &Raw.RovEpk, elevationThreshold);
+
+            if (!baseOK || !roverOK)
+            {
+                continue;
+            }
+
+            // 选择GPS和BDS基准星
+            DetRefSat(&Raw.BasEpk, &Raw.RovEpk, &Raw.SdObs, &Raw.DDObs);
+
+            // 构造星间双差
+            FormDDEpochObs(&Raw.BasEpk, &Raw.RovEpk, &Raw.SdObs, &Raw.DDObs);
+
+            // 每颗双差卫星有4个观测值，
+            // 至少需要3颗普通双差卫星才能估计3个坐标和模糊度
+            if (Raw.DDObs.Sats < 3)
+            {
+                continue;
+            }
+
+            // 检查每个实际参与双差的系统是否有参考星
+            bool referenceOK = true;
+
+            for (int sys = 0; sys < 2; sys++)
+            {
+                if (Raw.DDObs.DDSatNum[sys] > 0 && Raw.DDObs.RefPos[sys] < 0)
+                {
+                    referenceOK = false;
+                }
+            }
+
+            if (!referenceOK)
+            {
+                continue;
+            }
+
+            // 当前RTKFloat计算的是浮点解
+            bool floatOK = RTKFloat(&Raw, &Raw.BasEpk, &Raw.RovEpk);
+
+            if (!floatOK)
+            {
+                continue;
+            }
+
+            floatSuccessCount++;
+            
+            // 浮点解成功后，尝试模糊度固定
+            bool fixedOK = RTKFix(&Raw, config.RatioThres);
+
+            if (fixedOK)
+            {
+                cout << "Epoch " << totalEpochCount
+                    << ": RTK fixed solution succeeded." << endl;
+            }
+            else
+            {
+                cout << "Epoch " << totalEpochCount
+                    << ": RTK float solution retained." << endl;
+            }
+
+            cout << "Ratio: " << Raw.DDObs.Ratio << endl;
+
+            cout << "Baseline ECEF [m]: "
+                << "dX=" << Raw.DDObs.dPos[0] << ", "
+                << "dY=" << Raw.DDObs.dPos[1] << ", "
+                << "dZ=" << Raw.DDObs.dPos[2] << endl;
+
+            cout << "Epoch " << totalEpochCount
+                << ": RTK float solution succeeded." << endl;
+
+            cout << "Baseline ECEF [m]: "
+                << "dX=" << Raw.DDObs.dPos[0] << ", "
+                << "dY=" << Raw.DDObs.dPos[1] << ", "
+                << "dZ=" << Raw.DDObs.dPos[2] << endl;
+
+            rtkLog << fixed << setprecision(4);
+            rtkLog << "WEEK=" << Raw.RovEpk.Time.Week
+                << " SOW=" << Raw.RovEpk.Time.SecOfWeek
+                << " BASELINE_X=" << Raw.DDObs.dPos[0]
+                << " BASELINE_Y=" << Raw.DDObs.dPos[1]
+                << " BASELINE_Z=" << Raw.DDObs.dPos[2]
+                << " RMS_X=" << Raw.DDObs.FloatRMS[0]
+                << " RMS_Y=" << Raw.DDObs.FloatRMS[1]
+                << " RMS_Z=" << Raw.DDObs.FloatRMS[2]
+                << " SIGMA0=" << Raw.DDObs.Sigma0
+                << " DD_SATS=" << Raw.DDObs.Sats
+                << endl;
+        }
+
+        fclose(FBas);
+        fclose(FRov);
+        rtkLog.close();
+
+        cout << "RTK processing finished." << endl;
+        cout << "Synchronized epochs: " << totalEpochCount << endl;
+        cout << "Successful float solutions: " << floatSuccessCount << endl;
+        return 0;
     }
 
-    cout << "当前定位模式：单点定位SPP" << endl;
+    cout << "Positioning mode: SPP" << endl;
     const double elevationThreshold = config.ElevThreshold * Deg2Rad;
 
     FILE* fp = nullptr;
@@ -255,7 +434,7 @@ int main()
                         << endl;
                 }
             }
-
+ 
             UserPos.Time = Obs.Time;
 
             if (SPP(GpsEph, BdsEph, &UserPos, &Obs, elevationThreshold))

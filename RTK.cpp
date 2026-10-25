@@ -49,9 +49,7 @@ int GetSynObs(FILE* FBas, FILE* FRov, SOCKET& BasSock, SOCKET& RovSock, RAWDAT* 
     // ②将当前时刻的流动站观测时刻与基站观测时刻求差，得到时间差。如果流动站时刻早于基站时刻，返回同步不成功；
     // 如果时间差小于阈值，返回同步成功；如果晚于基站时间，进入第三步。
     double dt = GetDiffTime(&Raw->RovEpk.Time, &Raw->BasEpk.Time);
-    if (dt<-0.5) {
-        return 0;
-    }
+    if (dt<-0.5) return 0;
     else if(fabs(dt) < 0.5) {
         return 1;
     }
@@ -144,7 +142,7 @@ void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHO
             continue;
         }
 
-        // 6.在基站观测数据中寻找相同系统、相同PRN的卫星
+        // 6.在基站(EpkA)观测数据中寻找相同系统、相同PRN的卫星
         int BasIndex = -1;
 
         for (int j = 0; j < EpkA->SatNum && j < MAXCHANNUM; j++){
@@ -200,7 +198,6 @@ void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHO
         for (int Freq = 0; Freq < 2; Freq++){
             // 单差方向：流动站减基站
             SdSat.dP[Freq] = RovSat.P[Freq] - BasSat.P[Freq];
-
             SdSat.dL[Freq] = RovSat.L[Freq] - BasSat.L[Freq];
         }
         // 11.共同卫星数量加1
@@ -403,9 +400,496 @@ void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCH
         }
     }
 }
+
+/********************************************************************************
+    函数名称：DetRefSat
+
+    函数目的：分别为GPS和BDS选取用于星间双差的基准星
+
+    核心任务：
+        遍历基站和流动站的共同卫星，先检查站间单差观测是否有效，
+        以及两站对应卫星的位置是否计算成功。
+
+        根据单差观测中保存的nBas和nRov索引，访问两站原始观测，
+        检查双频载波的奇偶状态、载噪比和连续锁定时间等条件。
+
+        在满足质量要求和高度角门限的候选卫星中，分别为GPS和BDS
+        选择流动站高度角最大的卫星作为基准星，并保存其卫星号
+        和在单差观测数组中的位置，供后续构造星间双差使用。
+
+    输入参数：
+        EpkA    基站观测历元，提供卫星原始观测和卫星位置计算结果
+
+        EpkB    流动站观测历元，提供卫星原始观测、载噪比、
+                连续锁定时间和高度角等信息
+
+        SDObs   站间单差观测历元，调用前应已经完成共同卫星匹配、
+                站间单差构造和周跳探测，提供：
+                1. 共同卫星数量SatNum
+                2. 卫星系统System和卫星号Prn
+                3. 单差观测有效性标志Valid
+                4. 对应基站观测数组的索引nBas
+                5. 对应流动站观测数组的索引nRov
+
+    输出参数：
+        DDObs   在双差信息结构体中保存基准星选取结果：
+                RefPrn[0]    GPS基准星的卫星号
+                RefPos[0]    GPS基准星在SdSatObs[]中的下标
+                RefPrn[1]    BDS基准星的卫星号
+                RefPos[1]    BDS基准星在SdSatObs[]中的下标
+
+                某个系统没有满足要求的基准星时，该系统对应的
+                RefPrn和RefPos均设为-1。
+
+    返回值：
+        无（void），通过DDObs中的RefPrn和RefPos判断选取结果。
+
+    选取原则：
+        1. GPS和BDS分别选取基准星，同一系统内构造星间双差。
+        2. 先进行质量检查，再比较高度角。
+        3. 单差观测必须有效，两站卫星位置计算必须成功。
+        4. 两站双频载波的奇偶状态必须可靠。
+        5. 流动站双频载噪比和连续锁定时间必须满足设定门限。
+        6. 在达到高度角门限的合格候选星中，选择流动站高度角
+           最大的卫星。
+
+    注意事项：
+        1. 调用前，两站历元必须已经同步，并完成卫星位置和高度角计算，以及站间单差构造和周跳探测。
+        2. 每个历元开始选取时，应先将两个系统的RefPrn和RefPos设为-1，避免沿用上一历元已经失效的选取结果。
+        3. RefPos是SDObs->SdSatObs[]中的下标，不是原始观测数组SatObs[]中的下标。访问两站原始观测时，应通过该单差
+           卫星记录中的nBas和nRov进行索引转换。
+        4. Elevation的单位为弧度。若高度角门限使用度表示，必须先乘以Deg2Rad，再进行比较。
+        5. 当前解码程序中，half[]保存的是Parity known标志：1表示奇偶状态已知，0表示未知，不能把half等于1
+           直接理解为发生了半周问题。
+        6. 本函数只负责选取基准星，不计算双差观测值，也不进行模糊度固定；不修改SDObs中的单差观测和周跳历史数据。
+        7. 若某系统的RefPos为-1，后续不能使用该下标访问数组，也不能为该系统构造依赖此基准星的星间双差。
+********************************************************************************/
 void DetRefSat(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* SDObs, DDCOBS* DDObs){
+    double MinElevation = 40.0 * Deg2Rad;  //最低高度角
+
+    double MaxElevation[2] = {0.0, 0.0};
+    // 以站间单差卫星数量进行循环，
+    // 先检查单差数据是否被标记为粗差以及基站与流动站的卫星位置计算
+    // 是否成功，若不通过质量检查则continue。
+    //先将RefPrn和RefPos数组设置为-1；
+    for (int i = 0; i < 2;i++){
+        DDObs->RefPos[i] = -1;
+        DDObs->RefPrn[i] = -1;
+    }
+    // 以站间单差卫星数量进行循环，先检查单差数据是否被标记为粗差
+    // 以及基站与流动站的卫星位置计算是否成功，
+    // 若不通过质量检查则continue
+    for (int i = 0; i < SDObs->SatNum;i++){
+        // 检查单差数据是否被标记为粗差
+        if (SDObs->SdSatObs[i].Valid != 1){
+            continue;
+        }
+        // 检查基站和流动站的卫星位置是否计算成功
+        if (EpkA->SatPVT[SDObs->SdSatObs[i].nBas].Valid == false ||
+                EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Valid == false)
+        {
+            continue;
+        }
+        // 检查两站两个频率的奇偶状态（没有半周问题）
+        if (EpkA->SatObs[SDObs->SdSatObs[i].nBas].half[0] == 0 ||
+                EpkA->SatObs[SDObs->SdSatObs[i].nBas].half[1] == 0 ||
+                EpkB->SatObs[SDObs->SdSatObs[i].nRov].half[0] == 0 ||
+                EpkB->SatObs[SDObs->SdSatObs[i].nRov].half[1] == 0)
+        {
+            continue;
+        }
+        // 检查流动站的载噪比（大于35dBHz）
+        if (EpkB->SatObs[SDObs->SdSatObs[i].nRov].cn0[0] <= 35.0 ||
+                EpkB->SatObs[SDObs->SdSatObs[i].nRov].cn0[1] <= 35.0)
+        {
+            continue;
+        }
+        // 连续观测时间大于6s
+        if (EpkB->SatObs[SDObs->SdSatObs[i].nRov].LockTime[0] < 6.0 ||
+                EpkB->SatObs[SDObs->SdSatObs[i].nRov].LockTime[1] < 6.0)
+        {
+            continue;
+        }
+        //高度角
+        if (EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Elevation < MinElevation)
+        {
+            continue;
+        }
+        int sys;
+        if (SDObs->SdSatObs[i].System == GPS)
+        {
+            sys = 0;
+        }
+        else if (SDObs->SdSatObs[i].System == BDS)
+        {
+            sys = 1;
+        }
+        else continue;
+
+        // 通过质量检查后，选取高度角最大且流动站两个频率的CN0大于某个阈值（如35dBHz）的单差数据，
+        // 将其卫星号和数组下标保存到RefPrn和RefPos数组。
+        // 基准站常架设在观测环境良好的情况下，参考星主要以流动站数据的质量为参考。
+
+        if (EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Elevation > MaxElevation[sys])
+        {
+            MaxElevation[sys] = EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Elevation;
+            DDObs->RefPrn[sys] = SDObs->SdSatObs[i].Prn;
+            DDObs->RefPos[sys] = i;
+        }
+    }
 
 }
-bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov){
 
+// 站星双差观测值
+void FormDDEpochObs(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* SDObs, DDCOBS* DDObs)
+{
+    // 只清双差计数，不清除已经选好的参考星
+    DDObs->Sats = 0;
+    DDObs->DDSatNum[0] = 0;
+    DDObs->DDSatNum[1] = 0;
+    DDObs->bFixed = false;
+
+    // sys=0为GPS，sys=1为BDS
+    for (int sys = 0; sys < 2; sys++)
+    {
+        int ref = DDObs->RefPos[sys];
+        if (ref < 0 || ref >= SDObs->SatNum)
+            continue;
+
+        const SDSATOBS& Ref = SDObs->SdSatObs[ref];
+        if (Ref.System != sys || Ref.Valid != 1)
+            continue;
+
+        int refBas = Ref.nBas;
+        int refRov = Ref.nRov;
+
+        if (!EpkA->SatPVT[refBas].Valid || !EpkB->SatPVT[refRov].Valid)
+            continue;
+
+        for (int j = 0; j < SDObs->SatNum; j++)
+        {
+            const SDSATOBS& Sat = SDObs->SdSatObs[j];
+
+            if (j == ref || Sat.System != sys || Sat.Valid != 1)
+                continue;
+
+            int nBas = Sat.nBas;
+            int nRov = Sat.nRov;
+
+            if (!EpkA->SatPVT[nBas].Valid || !EpkB->SatPVT[nRov].Valid)
+                continue;
+
+            // 当前half保存Parity known：0未知，1已知
+            bool usable = true;
+            for (int f = 0; f < 2; f++)
+            {
+                if (EpkA->SatObs[nBas].half[f] == 0 ||
+                    EpkB->SatObs[nRov].half[f] == 0 ||
+                    EpkA->SatObs[refBas].half[f] == 0 ||
+                    EpkB->SatObs[refRov].half[f] == 0)
+                    usable = false;
+            }
+
+            if (!usable)
+                continue;
+
+            int q = DDObs->Sats;
+            DDObs->SdIndex[q] = j;
+
+            // 普通星单差减本系统参考星单差，结果都是米
+            for (int f = 0; f < 2; f++)
+            {
+                DDObs->ddP[q][f] = Sat.dP[f] - Ref.dP[f];
+                DDObs->ddL[q][f] = Sat.dL[f] - Ref.dL[f];
+            }
+
+            DDObs->Sats++;
+            DDObs->DDSatNum[sys]++;
+        }
+    }
+}
+
+
+// 相对定位浮点解
+bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov)
+{
+    DDCOBS& DD = Raw->DDObs;
+    SDEPOCHOBS& SD = Raw->SdObs;
+
+    // 清除上次浮点结果；成功与否以返回值为准
+    DD.bFixed = false;
+    DD.QFloat.resize(0, 0);
+    DD.Sigma0 = 0.0;
+    for (int k = 0; k < 3; k++)
+    {
+        DD.dPos[k] = 0.0;
+        DD.FloatRMS[k] = 0.0;
+    }
+    for (int k = 0; k < MAXCHANNUM * 2; k++)
+        DD.FloatAmb[k] = 0.0;
+
+    int d = DD.Sats;           // 非参考双差卫星数
+    if (d < 3)
+        return false;
+
+    int obsNum = 4 * d;        // 每星P1、P2、L1、L2
+    int unknownNum = 3 + 2*d;  // 三维坐标、每星两个模糊度
+
+    // 教学示例采用课件常量，尚未接入INI参数
+    const double codeNoise = 0.3;
+    const double phaseNoise = 0.01;
+
+    double wl[2][2] = {
+        { WL1_GPS, WL2_GPS },
+        { WL1_BDS, WL3_BDS }
+    };
+
+    double BasePos[3], RovPos[3];
+    for (int k = 0; k < 3; k++)
+    {
+        BasePos[k] = Raw->BaseBest.Pos[k];
+        RovPos[k] = Raw->RoverBest.Pos[k];
+    }
+
+    // 模糊度以“周”为单位，初始值不取整
+    VectorXd Amb(2*d);
+    for (int q = 0; q < d; q++)
+    {
+        int sd = DD.SdIndex[q];
+        int sys = SD.SdSatObs[sd].System;
+        for (int f = 0; f < 2; f++)
+            Amb(2*q + f) =
+                (DD.ddL[q][f] - DD.ddP[q][f]) / wl[sys][f];
+    }
+
+    // 构造相关权阵：同系统、同频、同类型之间保留相关项
+    MatrixXd P = MatrixXd::Zero(obsNum, obsNum);
+    for (int q = 0; q < d; q++)
+    {
+        int sys = SD.SdSatObs[DD.SdIndex[q]].System;
+        int ds = DD.DDSatNum[sys];
+
+        for (int r = 0; r < d; r++)
+        {
+            int otherSys = SD.SdSatObs[DD.SdIndex[r]].System;
+            if (otherSys != sys)
+                continue;
+
+            for (int t = 0; t < 4; t++)
+            {
+                double sigma = codeNoise;
+                if (t >= 2){
+                    sigma = phaseNoise;
+                }
+                double w = -1.0 / (2.0 * sigma * sigma * (ds + 1));
+
+                if (q == r){
+                    w = ds /(2.0 * sigma * sigma * (ds + 1));
+                }
+                P(4*q + t, 4*r + t) = w;
+            }
+        }
+    }
+
+    for (int iteration = 0; iteration < MAXIteration; iteration++)
+    {
+        MatrixXd B = MatrixXd::Zero(obsNum, unknownNum);
+        VectorXd W = VectorXd::Zero(obsNum);
+
+        for (int q = 0; q < d; q++)
+        {
+            const SDSATOBS& Sat = SD.SdSatObs[DD.SdIndex[q]];
+            int sys = Sat.System;
+            const SDSATOBS& Ref = SD.SdSatObs[DD.RefPos[sys]];
+
+            int jBas = Sat.nBas, jRov = Sat.nRov;
+            int iBas = Ref.nBas, iRov = Ref.nRov;
+
+            // 两站分别使用各自已经计算好的卫星坐标
+            double rhoBj = Distance(BasePos, Base->SatPVT[jBas].SatPos);
+            double rhoRj = Distance(RovPos, Rov->SatPVT[jRov].SatPos);
+            double rhoBi = Distance(BasePos, Base->SatPVT[iBas].SatPos);
+            double rhoRi = Distance(RovPos, Rov->SatPVT[iRov].SatPos);
+
+            double rhoDD = rhoRj - rhoBj - rhoRi + rhoBi;
+            int row = 4*q;
+
+            // 四行的前三列相同，都是几何距离的偏导
+            for (int k = 0; k < 3; k++)
+            {
+                double g =
+                    (RovPos[k] - Rov->SatPVT[jRov].SatPos[k]) / rhoRj
+                  - (RovPos[k] - Rov->SatPVT[iRov].SatPos[k]) / rhoRi;
+
+                for (int t = 0; t < 4; t++)
+                    B(row + t, k) = g;
+            }
+
+            for (int f = 0; f < 2; f++)
+            {
+                W(row + f) = DD.ddP[q][f] - rhoDD;
+
+                W(row + 2 + f) = DD.ddL[q][f] - rhoDD
+                              - wl[sys][f] * Amb(2*q + f);
+
+                B(row + 2 + f, 3 + 2*q + f) = wl[sys][f];
+            }
+        }
+
+        // 数量足够还不代表可解，必须检查几何秩
+        if (B.fullPivLu().rank() < unknownNum)
+            return false;
+
+        MatrixXd Normal = B.transpose() * P * B;
+        VectorXd U = B.transpose() * P * W;
+
+        // 仍然求解正规方程，用LDLT代替显式求逆
+        LDLT<MatrixXd> solver(Normal);
+        if (solver.info() != Success || !solver.isPositive())
+            return false;
+
+        VectorXd delta = solver.solve(U);
+        if (solver.info() != Success || !delta.allFinite())
+            return false;
+
+        for (int k = 0; k < 3; k++)
+            RovPos[k] += delta(k);
+
+        for (int k = 0; k < 2*d; k++)
+            Amb(k) += delta(3 + k);
+
+        double correction = sqrt(delta(0)*delta(0) + delta(1)*delta(1) + delta(2)*delta(2));
+
+        if (correction < 1E-4)
+        {
+            // 后验残差：不能直接用本轮求解前的W评定精度
+            VectorXd v = W - B * delta;
+            double variance = v.dot(P * v) / (obsNum - unknownNum);
+
+            MatrixXd Q = solver.solve(
+                MatrixXd::Identity(unknownNum, unknownNum));
+
+            if (solver.info() != Success || !Q.allFinite() ||
+                !isfinite(variance) || variance < 0.0)
+                return false;
+
+            for (int k = 0; k < 3; k++)
+            {
+                if (Q(k, k) < 0.0)
+                    return false;
+            }
+
+            DD.QFloat = Q;
+            DD.Sigma0 = sqrt(variance);
+
+            for (int k = 0; k < 3; k++)
+            {
+                DD.dPos[k] = RovPos[k] - BasePos[k];
+                DD.FloatRMS[k] = DD.Sigma0 * sqrt(Q(k, k));
+            }
+
+            for (int k = 0; k < 2*d; k++)
+                DD.FloatAmb[k] = Amb(k);
+
+            return true;
+        }
+    }
+    return false; // 超过迭代次数仍未收敛
+}
+
+/********************************************************************************
+    函数名称：RTKFix
+
+    函数目的：搜索整数模糊度，并在Ratio检验通过后计算固定基线
+
+    输入参数：
+        Raw             当前历元数据，调用前RTKFloat必须成功
+        ratioThreshold  Ratio检验门限，来自配置文件
+
+    输出参数：
+        Raw->DDObs.FixedAmb  最优和次优整数模糊度候选
+        Raw->DDObs.ResAmb    两组候选的目标函数值
+        Raw->DDObs.Ratio     Ratio值
+        Raw->DDObs.dPos      成功时更新为固定基线
+        Raw->DDObs.bFixed    当前历元是否固定成功
+
+    返回值：
+        true    接受固定，并完成基线更新
+        false   未接受固定，保留浮点基线
+********************************************************************************/
+bool RTKFix(RAWDAT* Raw, double ratioThreshold)
+{
+    DDCOBS& DD = Raw->DDObs;
+
+    // 1. 清除上一历元的固定状态和检验结果
+    DD.bFixed = false;
+    DD.Ratio = 0.0;
+    DD.ResAmb[0] = 0.0;
+    DD.ResAmb[1] = 0.0;
+
+    // 每颗普通双差卫星对应两个频率的模糊度
+    int n = 2 * DD.Sats;
+
+    // 当前lambda中的求逆函数最多处理250维
+    if (n <= 0 || n > 250)
+        return false;
+
+    if (DD.QFloat.rows() != 3 + n || DD.QFloat.cols() != 3 + n)
+        return false;
+
+    // 2. 提取模糊度矩阵、坐标与模糊度的交叉矩阵
+    MatrixXd Qaa = DD.QFloat.block(3, 3, n, n);
+    MatrixXd Qba = DD.QFloat.block(0, 3, 3, n);
+
+    // 3. 搜索最优和次优两组整数模糊度
+    int info = lambda(n, 2, DD.FloatAmb, Qaa.data(), DD.FixedAmb, DD.ResAmb);
+
+    if (info != 0){
+        return false;
+    }
+       
+
+    // 4. 检查候选代价，避免无效数值和除以零
+    if (!isfinite(DD.ResAmb[0]) || !isfinite(DD.ResAmb[1]) ||
+        DD.ResAmb[0] <= 0.0 || DD.ResAmb[1] < DD.ResAmb[0]){
+            return false;
+        }
+    DD.Ratio = DD.ResAmb[1] / DD.ResAmb[0];
+
+    if (!isfinite(DD.Ratio) || DD.Ratio < ratioThreshold){
+        return false;
+    }
+    // 5. 计算“固定模糊度减浮点模糊度”
+    VectorXd dAmb(n);
+
+    for (int i = 0; i < n; i++)
+    {
+        dAmb(i) = DD.FixedAmb[i] - DD.FloatAmb[i];
+    }
+
+    // 6. 根据模糊度变化，计算固定基线改正
+    LDLT<MatrixXd> solver(Qaa);
+
+    if (solver.info() != Success || !solver.isPositive())
+        return false;
+
+    VectorXd u = solver.solve(dAmb);
+
+    if (solver.info() != Success || !u.allFinite())
+        return false;
+
+    VectorXd dBaseline = Qba * u;
+
+    if (!dBaseline.allFinite())
+        return false;
+
+    // 7. 所有计算成功后，再更新基线并标记固定
+    for (int i = 0; i < 3; i++)
+    {
+        DD.dPos[i] += dBaseline(i);
+    }
+
+    DD.bFixed = true;
+
+    return true;
 }

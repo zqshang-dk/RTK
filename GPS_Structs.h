@@ -319,6 +319,12 @@ struct DDCOBS
 	float  FixRMS[2];                 // 固定解定位中rms误差
 	double dPos[3];                   // 基线向量
 	bool bFixed;                      // true为固定，false为未固定
+	int SdIndex[MAXCHANNUM];          // 记录双差中的这颗卫星的索引
+	double ddP[MAXCHANNUM][2], ddL[MAXCHANNUM][2];     // 保存双频伪距和载波相位双差
+	double FloatAmb[MAXCHANNUM * 4];  // 保存最小二乘求出的浮点模糊度
+	MatrixXd QFloat;                  // 保存浮点参数的不确定程度及相互关系
+    double Sigma0;                    // 判断残差与设定噪声是否相符
+	double FloatRMS[3];               // 保存三个坐标分量的精度估计
 
 	DDCOBS()
 	{
@@ -426,5 +432,15 @@ int GetSynObs(FILE* FBas, FILE* FRov, SOCKET& BasSock, SOCKET& RovSock, RAWDAT* 
 void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHOBS *SDObs);
 void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* Obs);
 void DetRefSat(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* SDObs, DDCOBS* DDObs);
+void FormDDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHOBS *SDObs, DDCOBS *);
 bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov);
+bool RTKFix(RAWDAT* Raw, double ratioThreshold);
+
+/* lambda */
+static int LD(int n, const double *Q, double *L, double *D);
+void gauss(int n, double *L, double *Z, int i, int j);
+void perm(int n, double *L, double *D, int j, double del, double *Z);
+void reduction(int n, double *L, double *D, double *Z);
+int search(int n, int m, const double *L, const double *D, const double *zs, double *zn, double *s);
+int lambda(int n, int m, const double *a, const double *Q, double *F, double *s);
 #endif
