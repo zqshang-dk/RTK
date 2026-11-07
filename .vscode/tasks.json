@@ -1,0 +1,46 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build RTK",
+            "type": "process",
+            "command": "D:/Environment/mingw64/bin/g++.exe",
+            "args": [
+                "-Wall",
+                "-Wextra",
+                "-g3",
+                "-std=c++17",
+                "-finput-charset=UTF-8",
+                "-fexec-charset=UTF-8",
+                "-ID:/ThirdParty/eigen-3.3.8",
+                "${workspaceFolder}/src/AngleChange.cpp",
+                "${workspaceFolder}/src/CoordinateSystem.cpp",
+                "${workspaceFolder}/src/Decode.cpp",
+                "${workspaceFolder}/src/ErrorCorrect.cpp",
+                "${workspaceFolder}/src/MatrixModule.cpp",
+                "${workspaceFolder}/src/ReadCtrlFile.cpp",
+                "${workspaceFolder}/src/RTK.cpp",
+                "${workspaceFolder}/src/EKFliter.cpp",
+                "${workspaceFolder}/src/RTKNav.cpp",
+                "${workspaceFolder}/src/SatPVTCalculation.cpp",
+                "${workspaceFolder}/src/sockets.cpp",
+                "${workspaceFolder}/src/SPP.cpp",
+                "${workspaceFolder}/src/TimeChange.cpp",
+                "${workspaceFolder}/src/lambda.cpp",
+                "-lws2_32",
+                "-o",
+                "${workspaceFolder}/output/RTKNav.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        }
+    ]
+}
