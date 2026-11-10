@@ -30,7 +30,7 @@ bool CopyConfigString(char target[], size_t targetSize, const string& value)
 	return true;
 }
 
-// Read RTKConfig.ini. Each setting uses the key=value format.
+// Read the configuration file supplied by the user. Each setting uses key=value.
 bool ReadRTKConfigInfo(const char configFile[], ROVERCFGINFO* config)
 {
 	if (configFile == nullptr || config == nullptr)
@@ -278,6 +278,38 @@ bool ReadRTKConfigInfo(const char configFile[], ROVERCFGINFO* config)
 			(config->BasNetIP[0] == '\0' || config->BasNetPort == 0))
 		{
 			cout << "Error: BasNetIP and a nonzero BasNetPort are required in RTK network mode." << endl;
+			return false;
+		}
+	}
+
+
+	// 配置中的相对路径以ini文件所在目录为起点，而不是程序启动目录。
+	string configPath = configFile;
+#ifdef _WIN32
+	size_t slash = configPath.find_last_of("/\\");
+#else
+	size_t slash = configPath.find_last_of('/');
+#endif
+	string configDirectory;
+	if (slash != string::npos)
+		configDirectory = configPath.substr(0, slash + 1);
+
+	char* paths[] = { config->SPPObsDatFile, config->BasObsDatFile,
+	                  config->RovObsDatFile, config->ResFile };
+	size_t sizes[] = { sizeof(config->SPPObsDatFile), sizeof(config->BasObsDatFile),
+	                   sizeof(config->RovObsDatFile), sizeof(config->ResFile) };
+	for (int i = 0; i < 4; i++)
+	{
+		string path = paths[i];
+		if (path.empty())
+			continue;
+		bool absolute = path[0] == '/';
+#ifdef _WIN32
+		absolute = absolute || path[0] == '\\' || (path.size() > 1 && path[1] == ':');
+#endif
+		if (!absolute && !CopyConfigString(paths[i], sizes[i], configDirectory + path))
+		{
+			cout << "Error: Path relative to configuration file is too long: " << path << endl;
 			return false;
 		}
 	}

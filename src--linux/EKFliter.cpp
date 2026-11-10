@@ -1,50 +1,6 @@
 #include "GPS_Structs.h"
 using namespace std;
 
-/********************************************************************************
-    结构体名称：EKFSTATE
-
-    作用：
-        保存上一历元的滤波结果，供下一历元继续使用。
-
-    状态向量X的排列：
-        X(0)、X(1)、X(2)：流动站ECEF坐标，单位为米。
-
-        X(3)、X(4)：第0颗普通双差卫星的双频模糊度。
-        X(5)、X(6)：第1颗普通双差卫星的双频模糊度。
-        后面依此类推，模糊度单位为周。
-
-    P：
-        状态向量X的协方差矩阵。
-
-    注意：
-        BaseSaved与Initialized分开保存。
-        重新初始化模糊度时，不应随意更换已经固定的基站坐标。
-********************************************************************************/
-struct EKFSTATE
-{
-    bool Initialized = false;
-    bool BaseSaved = false;
-
-    int SatNum = 0;
-
-    // 记录各个模糊度对应的普通卫星。
-    int SatSystem[MAXCHANNUM] = {};
-    int SatPrn[MAXCHANNUM] = {};
-
-    // 记录GPS和BDS参考星的卫星号。
-    int RefPrn[2] = { -1, -1 };
-
-    // 固定使用的基站坐标。
-    double BasePos[3] = {};
-
-    // 上一次初始化或更新对应的时刻。
-    GPSTIME LastTime;
-
-    VectorXd X;
-    MatrixXd P;
-};
-
 // 保存在本文件中，函数返回后数据仍然存在。
 static EKFSTATE Filter;
 

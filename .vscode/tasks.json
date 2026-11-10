@@ -1,46 +1,128 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Build RTK",
-            "type": "process",
-            "command": "D:/Environment/mingw64/bin/g++.exe",
-            "args": [
-                "-Wall",
-                "-Wextra",
-                "-g3",
-                "-std=c++17",
-                "-finput-charset=UTF-8",
-                "-fexec-charset=UTF-8",
-                "-ID:/ThirdParty/eigen-3.3.8",
-                "${workspaceFolder}/src/AngleChange.cpp",
-                "${workspaceFolder}/src/CoordinateSystem.cpp",
-                "${workspaceFolder}/src/Decode.cpp",
-                "${workspaceFolder}/src/ErrorCorrect.cpp",
-                "${workspaceFolder}/src/MatrixModule.cpp",
-                "${workspaceFolder}/src/ReadCtrlFile.cpp",
-                "${workspaceFolder}/src/RTK.cpp",
-                "${workspaceFolder}/src/EKFliter.cpp",
-                "${workspaceFolder}/src/RTKNav.cpp",
-                "${workspaceFolder}/src/SatPVTCalculation.cpp",
-                "${workspaceFolder}/src/sockets.cpp",
-                "${workspaceFolder}/src/SPP.cpp",
-                "${workspaceFolder}/src/TimeChange.cpp",
-                "${workspaceFolder}/src/lambda.cpp",
-                "-lws2_32",
-                "-o",
-                "${workspaceFolder}/output/RTKNav.exe"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": [
-                "$gcc"
-            ]
-        }
-    ]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Prepare RTK build directory",
+      "type": "process",
+      "command": "/usr/bin/mkdir",
+      "args": [
+        "-p",
+        "${workspaceFolder}/build/linux"
+      ],
+      "problemMatcher": [],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "linux": {
+        "command": "/usr/bin/mkdir",
+        "args": [
+          "-p",
+          "${workspaceFolder}/build/linux"
+        ]
+      },
+      "windows": {
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "New-Item -ItemType Directory -Force -Path (Join-Path (Get-Location) 'build/windows') | Out-Null"
+        ]
+      }
+    },
+    {
+      "label": "Build RTK",
+      "type": "process",
+      "command": "/usr/bin/g++",
+      "dependsOn": "Prepare RTK build directory",
+      "args": [
+        "-std=c++17",
+        "-O2",
+        "-g",
+        "-I/usr/include/eigen3",
+        "-I${workspaceFolder}/src--linux",
+        "${workspaceFolder}/src--linux/AngleChange.cpp",
+        "${workspaceFolder}/src--linux/CoordinateSystem.cpp",
+        "${workspaceFolder}/src--linux/Decode.cpp",
+        "${workspaceFolder}/src--linux/ErrorCorrect.cpp",
+        "${workspaceFolder}/src--linux/MatrixModule.cpp",
+        "${workspaceFolder}/src--linux/ReadCtrlFile.cpp",
+        "${workspaceFolder}/src--linux/RTK.cpp",
+        "${workspaceFolder}/src--linux/EKFliter.cpp",
+        "${workspaceFolder}/src--linux/main.cpp",
+        "${workspaceFolder}/src--linux/SatPVTCalculation.cpp",
+        "${workspaceFolder}/src--linux/sockets.cpp",
+        "${workspaceFolder}/src--linux/SPP.cpp",
+        "${workspaceFolder}/src--linux/TimeChange.cpp",
+        "${workspaceFolder}/src--linux/lambda.cpp",
+        "-pthread",
+        "-o",
+        "${workspaceFolder}/build/linux/rtk"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "linux": {
+        "command": "/usr/bin/g++",
+        "args": [
+          "-std=c++17",
+          "-O2",
+          "-g",
+          "-I/usr/include/eigen3",
+          "-I${workspaceFolder}/src--linux",
+          "${workspaceFolder}/src--linux/AngleChange.cpp",
+          "${workspaceFolder}/src--linux/CoordinateSystem.cpp",
+          "${workspaceFolder}/src--linux/Decode.cpp",
+          "${workspaceFolder}/src--linux/ErrorCorrect.cpp",
+          "${workspaceFolder}/src--linux/MatrixModule.cpp",
+          "${workspaceFolder}/src--linux/ReadCtrlFile.cpp",
+          "${workspaceFolder}/src--linux/RTK.cpp",
+          "${workspaceFolder}/src--linux/EKFliter.cpp",
+          "${workspaceFolder}/src--linux/main.cpp",
+          "${workspaceFolder}/src--linux/SatPVTCalculation.cpp",
+          "${workspaceFolder}/src--linux/sockets.cpp",
+          "${workspaceFolder}/src--linux/SPP.cpp",
+          "${workspaceFolder}/src--linux/TimeChange.cpp",
+          "${workspaceFolder}/src--linux/lambda.cpp",
+          "-pthread",
+          "-o",
+          "${workspaceFolder}/build/linux/rtk"
+        ]
+      },
+      "windows": {
+        "command": "D:/Environment/mingw64/bin/g++.exe",
+        "args": [
+          "-std=c++17",
+          "-O2",
+          "-g",
+          "-ID:/ThirdParty/eigen-3.3.8",
+          "-I${workspaceFolder}/src",
+          "${workspaceFolder}/src/AngleChange.cpp",
+          "${workspaceFolder}/src/CoordinateSystem.cpp",
+          "${workspaceFolder}/src/Decode.cpp",
+          "${workspaceFolder}/src/ErrorCorrect.cpp",
+          "${workspaceFolder}/src/MatrixModule.cpp",
+          "${workspaceFolder}/src/ReadCtrlFile.cpp",
+          "${workspaceFolder}/src/RTK.cpp",
+          "${workspaceFolder}/src/EKFliter.cpp",
+          "${workspaceFolder}/src/RTKNav.cpp",
+          "${workspaceFolder}/src/SatPVTCalculation.cpp",
+          "${workspaceFolder}/src/sockets.cpp",
+          "${workspaceFolder}/src/SPP.cpp",
+          "${workspaceFolder}/src/TimeChange.cpp",
+          "${workspaceFolder}/src/lambda.cpp",
+          "-lws2_32",
+          "-o",
+          "${workspaceFolder}/build/windows/rtk.exe"
+        ]
+      }
+    }
+  ]
 }

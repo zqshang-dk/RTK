@@ -16,11 +16,72 @@
 using namespace Eigen;
 using namespace std;
 
-int main()
+// 写一个历元的结果。失败时写nan，防止把上一历元的坐标当成本历元结果。
+// gpsUsed、bdsUsed包含参考星；-1表示尚未完成双差构造，数量未知。
+void WriteRTKResult(ofstream& log, const RAWDAT& raw, bool hasSolution,
+                    const char reason[], int gpsUsed, int bdsUsed)
 {
+    log << fixed << setprecision(4);
+    log << raw.RovEpk.Time.Week
+        << " " << raw.RovEpk.Time.SecOfWeek;
+
+    if (hasSolution)
+    {
+        log << " " << raw.DDObs.dPos[0]
+            << " " << raw.DDObs.dPos[1]
+            << " " << raw.DDObs.dPos[2]
+            << " " << raw.DDObs.FloatRMS[0]
+            << " " << raw.DDObs.FloatRMS[1]
+            << " " << raw.DDObs.FloatRMS[2]
+            << " " << raw.DDObs.Sigma0;
+    }
+    else
+    {
+        log << " nan nan nan"
+            << " nan nan nan nan";
+    }
+
+    if (gpsUsed >= 0 && bdsUsed >= 0)
+        log << " " << raw.DDObs.Sats;
+    else
+        log << " nan";
+
+    if (hasSolution)
+    {
+        if (raw.DDObs.bFixed)
+            log << " FIX";
+        else
+            log << " FLOAT";
+        log << " " << raw.DDObs.Ratio;
+    }
+    else
+    {
+        log << " INVALID nan";
+    }
+
+    if (gpsUsed >= 0)
+        log << " " << gpsUsed;
+    else
+        log << " nan";
+    if (bdsUsed >= 0)
+        log << " " << bdsUsed;
+    else
+        log << " nan";
+    log << " " << reason << endl;
+}
+
+int main(int argc, char* argv[])
+{
+    // argv[0]是程序名，argv[1]是用户指定的配置文件路径。
+    if (argc != 2)
+    {
+        cout << "Usage: " << argv[0] << " <config.ini>" << endl;
+        return 1;
+    }
+
     ROVERCFGINFO config{};
 
-    if (!ReadRTKConfigInfo("RTKConfiglinux.ini", &config))
+    if (!ReadRTKConfigInfo(argv[1], &config))
     {
         // 配置读取失败
         cout << "Error: Failed to read RTK configuration." << endl;
@@ -137,6 +198,22 @@ int main()
 
         int totalEpochCount = 0;
         int floatSuccessCount = 0;
+        int fixedSuccessCount = 0;
+        bool referenceSaved = false;
+
+        // 给定的是流动站减基站的ECEF参考基线，单位为米，不是绝对坐标。
+        const double referenceBaseline[3] = { -469.568, 702.675, -1405.092 };
+        rtkLog << fixed << setprecision(4);
+        rtkLog << "# REF_BASELINE_X=" << referenceBaseline[0]
+            << " REF_BASELINE_Y=" << referenceBaseline[1]
+            << " REF_BASELINE_Z=" << referenceBaseline[2] << endl;
+        rtkLog << "# GPS_USED/BDS_USED include reference satellites; nan means unavailable."
+            << endl;
+        rtkLog << "# RMS_X/Y/Z describe the float solution, including rows with STATUS=FIX."
+            << endl;
+        // 表头只写一次，后面的每个历元按相同顺序写数值，列之间用空格分隔。
+        rtkLog << "WEEK SOW BASELINE_X BASELINE_Y BASELINE_Z RMS_X RMS_Y RMS_Z "
+            << "SIGMA0 DD_SATS STATUS RATIO GPS_USED BDS_USED REASON" << endl;
 
         while (true)
         {
@@ -151,6 +228,7 @@ int main()
             // 0表示当前两个历元没有同步成功
             if (syncResult == 0)
             {
+                WriteRTKResult(rtkLog, Raw, false, "NOT_SYNCHRONIZED", -1, -1);
                 continue;
             }
 
@@ -179,8 +257,26 @@ int main()
 
             bool roverOK = SPP(Raw.GpsEph, Raw.BdsEph, &Raw.RoverBest, &Raw.RovEpk, elevationThreshold);
 
+            // 第一次有效基站SPP坐标只保存一次，供后处理确定固定的ENU方向。
+            // 这是近似绝对坐标，不是用来评价基线精度的真值。
+            if (baseOK && !referenceSaved)
+            {
+                rtkLog << fixed << setprecision(4);
+                rtkLog << "# ENU_ORIGIN_X=" << Raw.BaseBest.Pos[0]
+                    << " ENU_ORIGIN_Y=" << Raw.BaseBest.Pos[1]
+                    << " ENU_ORIGIN_Z=" << Raw.BaseBest.Pos[2]
+                    << " SOURCE=FIRST_VALID_BASE_SPP" << endl;
+                referenceSaved = true;
+            }
+
             if (!baseOK || !roverOK)
             {
+                const char* reason = "BASE_AND_ROVER_SPP_FAILED";
+                if (baseOK)
+                    reason = "ROVER_SPP_FAILED";
+                else if (roverOK)
+                    reason = "BASE_SPP_FAILED";
+                WriteRTKResult(rtkLog, Raw, false, reason, -1, -1);
                 EKFReset(false);
                 continue;
             }
@@ -191,10 +287,19 @@ int main()
             // 构造星间双差
             FormDDEpochObs(&Raw.BasEpk, &Raw.RovEpk, &Raw.SdObs, &Raw.DDObs);
 
+            // 双差数量不含参考星；该系统有双差观测时，再加上它的参考星。
+            int gpsUsed = Raw.DDObs.DDSatNum[0];
+            int bdsUsed = Raw.DDObs.DDSatNum[1];
+            if (gpsUsed > 0 && Raw.DDObs.RefPos[0] >= 0)
+                gpsUsed++;
+            if (bdsUsed > 0 && Raw.DDObs.RefPos[1] >= 0)
+                bdsUsed++;
+
             // 每颗双差卫星有4个观测值，
             // 至少需要3颗普通双差卫星才能估计3个坐标和模糊度
             if (Raw.DDObs.Sats < 3)
             {
+                WriteRTKResult(rtkLog, Raw, false, "TOO_FEW_DD_SATS", gpsUsed, bdsUsed);
                 EKFReset(false);
                 continue;
             }
@@ -212,6 +317,7 @@ int main()
 
             if (!referenceOK)
             {
+                WriteRTKResult(rtkLog, Raw, false, "NO_REFERENCE_SAT", gpsUsed, bdsUsed);
                 EKFReset(false);
                 continue;
             }
@@ -223,9 +329,10 @@ int main()
                 floatOK = RTKFloatEKF(&Raw,&Raw.BasEpk,&Raw.RovEpk,config.CodeNoise,config.CPNoise,positionNoise);
             }
             else{
-                floatOK = RTKFloat(&Raw,&Raw.BasEpk,&Raw.RovEpk);
+                floatOK = RTKFloat(&Raw,&Raw.BasEpk,&Raw.RovEpk,config.CodeNoise,config.CPNoise);
             }
             if (!floatOK){
+                WriteRTKResult(rtkLog, Raw, false, "FLOAT_FAILED", gpsUsed, bdsUsed);
                 continue;
             }
 
@@ -236,6 +343,7 @@ int main()
 
             if (fixedOK)
             {
+                fixedSuccessCount++;
                 cout << "Epoch " << totalEpochCount
                     << ": RTK fixed solution succeeded." << endl;
             }
@@ -255,18 +363,10 @@ int main()
                 << "dY=" << Raw.DDObs.dPos[1] << ", "
                 << "dZ=" << Raw.DDObs.dPos[2] << endl;
 
-            rtkLog << fixed << setprecision(4);
-            rtkLog << "WEEK=" << Raw.RovEpk.Time.Week
-                << " SOW=" << Raw.RovEpk.Time.SecOfWeek
-                << " BASELINE_X=" << Raw.DDObs.dPos[0]
-                << " BASELINE_Y=" << Raw.DDObs.dPos[1]
-                << " BASELINE_Z=" << Raw.DDObs.dPos[2]
-                << " RMS_X=" << Raw.DDObs.FloatRMS[0]
-                << " RMS_Y=" << Raw.DDObs.FloatRMS[1]
-                << " RMS_Z=" << Raw.DDObs.FloatRMS[2]
-                << " SIGMA0=" << Raw.DDObs.Sigma0
-                << " DD_SATS=" << Raw.DDObs.Sats
-                << endl;
+            if (fixedOK)
+                WriteRTKResult(rtkLog, Raw, true, "OK", gpsUsed, bdsUsed);
+            else
+                WriteRTKResult(rtkLog, Raw, true, "FIX_NOT_ACCEPTED", gpsUsed, bdsUsed);
         }
         
         if (FBas != nullptr)
@@ -282,6 +382,10 @@ int main()
         CloseSocket(BasSock);
         CloseSocket(RovSock);
 
+        // 分母为同步观测历元数，包含同步后解算失败的历元。
+        rtkLog << "# SYNC_EPOCHS=" << totalEpochCount
+            << " VALID_EPOCHS=" << floatSuccessCount
+            << " FIXED_EPOCHS=" << fixedSuccessCount << endl;
         rtkLog.close();
 
         cout << "RTK processing finished." << endl;

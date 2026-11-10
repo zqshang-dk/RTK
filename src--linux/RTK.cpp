@@ -474,7 +474,6 @@ void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCH
         }
     }
 }
-
 /********************************************************************************
     函数名称：DetRefSat
 
@@ -685,7 +684,7 @@ void FormDDEpochObs(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHO
 
 
 // 相对定位浮点解
-bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov)
+bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoise, double phaseNoise)
 {
     DDCOBS& DD = Raw->DDObs;
     SDEPOCHOBS& SD = Raw->SdObs;
@@ -709,9 +708,10 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov)
     int obsNum = 4 * d;        // 每星P1、P2、L1、L2
     int unknownNum = 3 + 2*d;  // 三维坐标、每星两个模糊度
 
-    // 教学示例采用课件常量，尚未接入INI参数
-    const double codeNoise = 0.3;
-    const double phaseNoise = 0.01;
+    // 使用配置文件中的CodeNoise和CPNoise，单位为米。
+    if (!isfinite(codeNoise) || !isfinite(phaseNoise) ||
+        codeNoise <= 0.0 || phaseNoise <= 0.0)
+        return false;
 
     double wl[2][2] = {
         { WL1_GPS, WL2_GPS },

@@ -357,6 +357,49 @@ struct RAWDAT {
 	DDCOBS DDObs;          // 双差和固定解结果
 	GPSEPH GpsEph[MAXGPSNUM], BdsEph[MAXBDSNUM];  //广播星历
 };
+
+/* 卡尔曼滤波状态 */
+struct EKFSTATE
+{
+    bool Initialized = false;
+    bool BaseSaved = false;
+    bool IsFixed = false;
+
+    int SatNum = 0;
+    int SatSystem[MAXCHANNUM] = {};
+    int SatPrn[MAXCHANNUM] = {};
+    int SatCount[MAXCHANNUM] = {};     // 保存周跳探测中的连续观测计数
+
+    int RefPrn[2] = { -1, -1 };
+    int RefCount[2] = { 0, 0 };
+
+    double BasePos[3] = {};            // 固定使用的基站ECEF坐标，m
+    double Ratio = 0.0;
+    GPSTIME LastTime;
+
+    Eigen::VectorXd X;                // 上次最终状态：坐标m，模糊度周
+    Eigen::MatrixXd P;                // 上次最终协方差
+
+    Eigen::VectorXd XPred;            // 当前预测状态
+    Eigen::MatrixXd PPred;
+
+    Eigen::VectorXd XFloat;           // 当前浮点状态
+    Eigen::MatrixXd PFloat;
+};
+
+/* 每历元处理结果 */
+enum EKFSTATUS
+{
+    EKF_FAILED = -1,
+    EKF_INITIALIZED = 0,
+    EKF_FLOAT = 1,
+    EKF_FIXED = 2
+};
+
+/* EKFliter.cpp */
+void EKFReset(bool resetBase);
+int RTKProcessEKF(RAWDAT* Raw, double codeNoise, double phaseNoise, double positionNoise, double ratioThreshold);
+
 /* AngleChange.cpp */
 double Degree2Rad(double theta);
 double Rad2Degree(double theta);
@@ -437,7 +480,7 @@ void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHO
 void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* Obs);
 void DetRefSat(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* SDObs, DDCOBS* DDObs);
 void FormDDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHOBS *SDObs, DDCOBS *);
-bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov);
+bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoise, double phaseNoise);
 bool RTKFix(RAWDAT* Raw, double ratioThreshold);
 
 /* lambda */
