@@ -5,3 +5,4 @@
 *.zip
 *.exe
 /RTK-main/
+/build/
