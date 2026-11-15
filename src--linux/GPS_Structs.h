@@ -492,8 +492,13 @@ int search(int n, int m, const double *L, const double *D, const double *zs, dou
 int lambda(int n, int m, const double *a, const double *Q, double *F, double *s);
 
 /* EKFliter.cpp */
-
+bool EKFTimePrediction(const RAWDAT &Raw, double dt, double positionNoise, EKFSTATE &Filter, int obsIndex[], int &obsNum);
 void EKFReset(bool resetBase);
-bool RTKFloatEKF(RAWDAT* Raw,EPOCHOBSDATA* Base,EPOCHOBSDATA* Rov,double codeNoise,double phaseNoise,double positionNoise);
+bool InitializeFilter(RAWDAT &Raw, EKFSTATE &Filter);
+int EKFMeasurementUpdate(const RAWDAT &Raw, const int obsIndex[], int obsNum, double codeNoise, double phaseNoise, EKFSTATE &Filter);
+bool EKFSaveResult(RAWDAT &Raw, EKFSTATE &Filter, bool hasMeasurement);
+bool RTKFloatEKF(RAWDAT *Raw, EPOCHOBSDATA *Base, EPOCHOBSDATA *Rov, double codeNoise, double phaseNoise, double positionNoise);
+
+
 
 #endif
