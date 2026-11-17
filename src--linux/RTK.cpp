@@ -22,54 +22,42 @@ using namespace std;
         1           成功得到一个观测历元
         -1          文件结束、连接关闭或读取出错
 ********************************************************************************/
-int ReadRTKEpoch(FILE* fp, SocketHandle sock, int inputMode, unsigned char buff[], int& len, EPOCHOBSDATA* Obs, RAWDAT* Raw, const char station[])
-{
-    while (true)
-    {
+int ReadRTKEpoch(FILE* fp, SocketHandle sock, int inputMode, unsigned char buff[], int& len, EPOCHOBSDATA* Obs, RAWDAT* Raw, const char station[]){
+    while (true){
         // 1. 先处理缓冲区里已经收到的数据
         int result = DecodeNovOem7Dat(buff, len, Obs, Raw->GpsEph, Raw->BdsEph);
         // 返回1才表示得到一个观测历元
-        if (result == 1)
-        {
+        if (result == 1){
             return 1;
         }
         // 2. 没有完整历元，需要继续读取
         int freeLength = MAXRAWLEN - len;
-        if (freeLength <= 0)
-        {
+        if (freeLength <= 0){
             cout << "Error: " << station << " input buffer is full." << endl;
             return -1;
         }
         int n = 0;
-        if (inputMode == INPUT_MODE_FILE)
-        {
+        if (inputMode == INPUT_MODE_FILE) {
             // 文件模式：从文件读取字节
             n = (int)fread(buff + len, 1, freeLength, fp);
-            if (n == 0)
-            {
-                if (ferror(fp))
-                {
+            if (n == 0){
+                if (ferror(fp)){
                     cout << "Error: Failed to read " << station << " file." << endl;
                 }
-                else
-                {
+                else{
                     cout << station << " file reached the end." << endl;
                 }
                 return -1;
             }
         }
-        else
-        {
+        else {
             // 网络模式：从TCP连接接收字节
             n = recv(sock, (char*)buff + len, freeLength, 0);
-
-            if (n == 0)
-            {
+            if (n == 0) {
                 cout << station << " connection was closed." << endl;
                 return -1;
             }
-            if (n < 0)
-            {
+            if (n < 0) {
                 cout << "Error: Failed to receive " << station << " data. Code="
                      << errno << " (" << strerror(errno) << ")" << endl;
                 return -1;
@@ -98,8 +86,7 @@ int ReadRTKEpoch(FILE* fp, SocketHandle sock, int inputMode, unsigned char buff[
         0           流动站历元较早，下次继续读取流动站
         -1          输入结束、连接关闭或读取失败
 ********************************************************************************/
-int GetSynObs(FILE* FBas, FILE* FRov,SocketHandle& BasSock, SocketHandle& RovSock,RAWDAT* Raw,int inputMode)
-{
+int GetSynObs(FILE* FBas, FILE* FRov,SocketHandle& BasSock, SocketHandle& RovSock,RAWDAT* Raw,int inputMode) {
     // 保存两站尚未处理完的原始字节
     static unsigned char BasBuff[MAXRAWLEN]{};
     static unsigned char RovBuff[MAXRAWLEN]{};
@@ -111,18 +98,14 @@ int GetSynObs(FILE* FBas, FILE* FRov,SocketHandle& BasSock, SocketHandle& RovSoc
     const double syncTolerance = 0.01;
     // 1. 每次调用，先读取一个新的流动站历元
     int result = ReadRTKEpoch(FRov,RovSock,inputMode,RovBuff,RovLen,&Raw->RovEpk,Raw,"Rover");
-    if (result == -1)
-    {
+    if (result == -1) {
         return -1;
     }
     // 2. 查找与这个流动站历元匹配的基站历元
-    while (true)
-    {
-        if (!hasBaseEpoch)
-        {
+    while (true) {
+        if (!hasBaseEpoch) {
             result = ReadRTKEpoch(FBas,BasSock,inputMode,BasBuff,BasLen,&Raw->BasEpk,Raw,"Base");
-            if (result == -1)
-            {
+            if (result == -1) {
                 return -1;
             }
             hasBaseEpoch = true;
@@ -130,15 +113,13 @@ int GetSynObs(FILE* FBas, FILE* FRov,SocketHandle& BasSock, SocketHandle& RovSoc
         // 时间差 = 流动站观测时间 - 基站观测时间
         double dt = GetDiffTime(&Raw->RovEpk.Time,&Raw->BasEpk.Time);
         // 3. 两站时间足够接近，同步成功
-        if (fabs(dt) < syncTolerance)
-        {
+        if (fabs(dt) < syncTolerance) {
             // 这个基站历元已经配对，下一次需要读取新的
             hasBaseEpoch = false;
             return 1;
         }
         // 4. 流动站较早：保留基站，下次读取新的流动站
-        if (dt < 0.0)
-        {
+        if (dt < 0.0) {
             return 0;
         }
         // 5. 基站较早：读取下一个基站历元继续比较
@@ -190,15 +171,13 @@ int GetSynObs(FILE* FBas, FILE* FRov,SocketHandle& BasSock, SocketHandle& RovSoc
 ********************************************************************************/
 void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHOBS *SDObs){
     // 1.检查输入指针是否有效(检查空指针，防止访问无效内存)
-    if (EpkA == nullptr || EpkB == nullptr || SDObs == nullptr)
-    {
+    if (EpkA == nullptr || EpkB == nullptr || SDObs == nullptr) {
         return;
     }
     // 2.清空当前历元的单差卫星数据
     // 不清空SdCObs，因为其中需要保留上一历元的MW、GF历史数据
     SDObs->SatNum = 0;
-    for (int i = 0; i < MAXCHANNUM; i++)
-    {
+    for (int i = 0; i < MAXCHANNUM; i++) {
         SDObs->SdSatObs[i] = SDSATOBS();
     }
     // 3.单差历元时间使用流动站观测时间
@@ -211,14 +190,12 @@ void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHO
         if (RovSat.System != GPS && RovSat.System != BDS){
             continue;
         }
-
         if (RovSat.Prn <= 0){
             continue;
         }
 
         // 6.在基站(EpkA)观测数据中寻找相同系统、相同PRN的卫星
         int BasIndex = -1;
-
         for (int j = 0; j < EpkA->SatNum && j < MAXCHANNUM; j++){
             if (EpkA->SatObs[j].System == RovSat.System && EpkA->SatObs[j].Prn == RovSat.Prn){
                 BasIndex = j;
@@ -312,10 +289,8 @@ void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHO
         3. MWGF历史按照“卫星系统 + 卫星号”匹配，不能按照数组下标匹配。
         4. MWGF::n表示已经连续通过检测的历史样本数，n为0表示没有可用历史。
 ********************************************************************************/
-void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* Obs)
-{
-    if (EpkA == nullptr || EpkB == nullptr || Obs == nullptr)
-    {
+void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* Obs){
+    if (EpkA == nullptr || EpkB == nullptr || Obs == nullptr) {
         return;
     }
 
@@ -374,8 +349,7 @@ void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCH
         MWGF& History = Obs->SdCObs[HistoryIndex];
 
         // 只有同一颗卫星且n大于0时，才有上一历元历史。
-        bool HasHistory =History.n > 0 && History.System == SdSat.System &&
-            History.Prn == SdSat.Prn;
+        bool HasHistory =History.n > 0 && History.System == SdSat.System && History.Prn == SdSat.Prn;
 
         // 检查LockTime和Parity。
         // 当前half[]保存的是OEM7的ParityFlag。
@@ -418,8 +392,7 @@ void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCH
         // GF组合：两个频率的载波相位单差之差。
         double GF = SdSat.dL[0] - SdSat.dL[1];
         // MW组合：载波部分减去伪距部分。
-        double MW =(f1 * SdSat.dL[0] - f2 * SdSat.dL[1]) / (f1 - f2)
-            - (f1 * SdSat.dP[0] + f2 * SdSat.dP[1]) / (f1 + f2);
+        double MW =(f1 * SdSat.dL[0] - f2 * SdSat.dL[1]) / (f1 - f2) - (f1 * SdSat.dP[0] + f2 * SdSat.dP[1]) / (f1 + f2);
         // 第一次看到这颗卫星，建立新的连续观测弧段。
         if (HasHistory == false){
             History.Prn = SdSat.Prn;
@@ -441,23 +414,20 @@ void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCH
         double dGF = fabs(GF - History.GF);
         double dMW = fabs(MW - History.MW);
 
-        if (dGF < GF_Threshold && dMW < MW_Threshold)
-        {
+        if (dGF < GF_Threshold && dMW < MW_Threshold) {
             // 检测通过，更新MW平滑值。
             int OldCount = History.n;
             int NewCount = OldCount + 1;
             History.MW = (OldCount * History.MW + MW) / NewCount;
             History.GF = GF;
             History.n = NewCount;
-            for (int Freq = 0; Freq < 2; Freq++)
-            {
+            for (int Freq = 0; Freq < 2; Freq++) {
                 BaseLockTime[HistoryIndex][Freq] = BasSat.LockTime[Freq];
                 RoverLockTime[HistoryIndex][Freq] = RovSat.LockTime[Freq];
             }
             SdSat.Valid = 1;
         }
-        else
-        {
+        else {
             // GF或MW变化过大，认为可能发生周跳。
             SdSat.Valid = 0;
             History.n = 0;
@@ -465,10 +435,8 @@ void DetectCycleSlip(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCH
         }
     }
     // 当前历元没有出现的卫星，不再保留连续观测历史。
-    for (int i = 0; i < MAXCHANNUM; i++)
-    {
-        if (HistoryUsed[i] == false)
-        {
+    for (int i = 0; i < MAXCHANNUM; i++) {
+        if (HistoryUsed[i] == false) {
             Obs->SdCObs[i].n = 0;
             LockHistoryValid[i] = false;
         }
@@ -559,42 +527,35 @@ void DetRefSat(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* S
         }
         // 检查基站和流动站的卫星位置是否计算成功
         if (EpkA->SatPVT[SDObs->SdSatObs[i].nBas].Valid == false ||
-                EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Valid == false)
-        {
+                EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Valid == false) {
             continue;
         }
         // 检查两站两个频率的奇偶状态（没有半周问题）
         if (EpkA->SatObs[SDObs->SdSatObs[i].nBas].half[0] == 0 ||
                 EpkA->SatObs[SDObs->SdSatObs[i].nBas].half[1] == 0 ||
                 EpkB->SatObs[SDObs->SdSatObs[i].nRov].half[0] == 0 ||
-                EpkB->SatObs[SDObs->SdSatObs[i].nRov].half[1] == 0)
-        {
+                EpkB->SatObs[SDObs->SdSatObs[i].nRov].half[1] == 0) {
             continue;
         }
         // 检查流动站的载噪比（大于35dBHz）
         if (EpkB->SatObs[SDObs->SdSatObs[i].nRov].cn0[0] <= 35.0 ||
-                EpkB->SatObs[SDObs->SdSatObs[i].nRov].cn0[1] <= 35.0)
-        {
+                EpkB->SatObs[SDObs->SdSatObs[i].nRov].cn0[1] <= 35.0) {
             continue;
         }
         // 连续观测时间大于6s
         if (EpkB->SatObs[SDObs->SdSatObs[i].nRov].LockTime[0] < 6.0 ||
-                EpkB->SatObs[SDObs->SdSatObs[i].nRov].LockTime[1] < 6.0)
-        {
+                EpkB->SatObs[SDObs->SdSatObs[i].nRov].LockTime[1] < 6.0) {
             continue;
         }
         //高度角
-        if (EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Elevation < MinElevation)
-        {
+        if (EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Elevation < MinElevation) {
             continue;
         }
         int sys;
-        if (SDObs->SdSatObs[i].System == GPS)
-        {
+        if (SDObs->SdSatObs[i].System == GPS) {
             sys = 0;
         }
-        else if (SDObs->SdSatObs[i].System == BDS)
-        {
+        else if (SDObs->SdSatObs[i].System == BDS) {
             sys = 1;
         }
         else continue;
@@ -603,8 +564,7 @@ void DetRefSat(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* S
         // 将其卫星号和数组下标保存到RefPrn和RefPos数组。
         // 基准站常架设在观测环境良好的情况下，参考星主要以流动站数据的质量为参考。
 
-        if (EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Elevation > MaxElevation[sys])
-        {
+        if (EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Elevation > MaxElevation[sys]) {
             MaxElevation[sys] = EpkB->SatPVT[SDObs->SdSatObs[i].nRov].Elevation;
             DDObs->RefPrn[sys] = SDObs->SdSatObs[i].Prn;
             DDObs->RefPos[sys] = i;
@@ -614,8 +574,7 @@ void DetRefSat(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* S
 }
 
 // 站星双差观测值
-void FormDDEpochObs(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* SDObs, DDCOBS* DDObs)
-{
+void FormDDEpochObs(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* SDObs, DDCOBS* DDObs){
     // 只清双差计数，不清除已经选好的参考星
     DDObs->Sats = 0;
     DDObs->DDSatNum[0] = 0;
@@ -623,59 +582,57 @@ void FormDDEpochObs(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHO
     DDObs->bFixed = false;
 
     // sys=0为GPS，sys=1为BDS
-    for (int sys = 0; sys < 2; sys++)
-    {
+    for (int sys = 0; sys < 2; sys++) {
         int ref = DDObs->RefPos[sys];
-        if (ref < 0 || ref >= SDObs->SatNum)
+        if (ref < 0 || ref >= SDObs->SatNum){
             continue;
-
+        }
+            
         const SDSATOBS& Ref = SDObs->SdSatObs[ref];
-        if (Ref.System != sys || Ref.Valid != 1)
+        if (Ref.System != sys || Ref.Valid != 1){
             continue;
+        }
 
         int refBas = Ref.nBas;
         int refRov = Ref.nRov;
 
-        if (!EpkA->SatPVT[refBas].Valid || !EpkB->SatPVT[refRov].Valid)
+        if (!EpkA->SatPVT[refBas].Valid || !EpkB->SatPVT[refRov].Valid){
             continue;
-
-        for (int j = 0; j < SDObs->SatNum; j++)
-        {
+        }
+            
+        for (int j = 0; j < SDObs->SatNum; j++) {
             const SDSATOBS& Sat = SDObs->SdSatObs[j];
 
-            if (j == ref || Sat.System != sys || Sat.Valid != 1)
+            if (j == ref || Sat.System != sys || Sat.Valid != 1){
                 continue;
-
+            }
             int nBas = Sat.nBas;
             int nRov = Sat.nRov;
 
-            if (!EpkA->SatPVT[nBas].Valid || !EpkB->SatPVT[nRov].Valid)
+            if (!EpkA->SatPVT[nBas].Valid || !EpkB->SatPVT[nRov].Valid){
                 continue;
+            }
 
             // 当前half保存Parity known：0未知，1已知
             bool usable = true;
-            for (int f = 0; f < 2; f++)
-            {
-                if (EpkA->SatObs[nBas].half[f] == 0 ||
-                    EpkB->SatObs[nRov].half[f] == 0 ||
-                    EpkA->SatObs[refBas].half[f] == 0 ||
-                    EpkB->SatObs[refRov].half[f] == 0)
-                    usable = false;
+            for (int f = 0; f < 2; f++) {
+                if (EpkA->SatObs[nBas].half[f] == 0 || EpkB->SatObs[nRov].half[f] == 0 ||
+                    EpkA->SatObs[refBas].half[f] == 0 || EpkB->SatObs[refRov].half[f] == 0){
+                        usable = false;
+                    }
             }
 
-            if (!usable)
+            if (!usable){
                 continue;
-
+            }
             int q = DDObs->Sats;
             DDObs->SdIndex[q] = j;
 
             // 普通星单差减本系统参考星单差，结果都是米
-            for (int f = 0; f < 2; f++)
-            {
+            for (int f = 0; f < 2; f++) {
                 DDObs->ddP[q][f] = Sat.dP[f] - Ref.dP[f];
                 DDObs->ddL[q][f] = Sat.dL[f] - Ref.dL[f];
             }
-
             DDObs->Sats++;
             DDObs->DDSatNum[sys]++;
         }
@@ -684,8 +641,7 @@ void FormDDEpochObs(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHO
 
 
 // 相对定位浮点解
-bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoise, double phaseNoise)
-{
+bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoise, double phaseNoise){
     DDCOBS& DD = Raw->DDObs;
     SDEPOCHOBS& SD = Raw->SdObs;
 
@@ -693,25 +649,25 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoi
     DD.bFixed = false;
     DD.QFloat.resize(0, 0);
     DD.Sigma0 = 0.0;
-    for (int k = 0; k < 3; k++)
-    {
+    for (int k = 0; k < 3; k++) {
         DD.dPos[k] = 0.0;
         DD.FloatRMS[k] = 0.0;
     }
-    for (int k = 0; k < MAXCHANNUM * 2; k++)
+    for (int k = 0; k < MAXCHANNUM * 2; k++){
         DD.FloatAmb[k] = 0.0;
-
+    }
     int d = DD.Sats;           // 非参考双差卫星数
-    if (d < 3)
+    if (d < 3){
         return false;
+    }
 
     int obsNum = 4 * d;        // 每星P1、P2、L1、L2
     int unknownNum = 3 + 2*d;  // 三维坐标、每星两个模糊度
 
     // 使用配置文件中的CodeNoise和CPNoise，单位为米。
-    if (!isfinite(codeNoise) || !isfinite(phaseNoise) ||
-        codeNoise <= 0.0 || phaseNoise <= 0.0)
-        return false;
+    if (!isfinite(codeNoise) || !isfinite(phaseNoise) || codeNoise <= 0.0 || phaseNoise <= 0.0){
+            return false;
+        }
 
     double wl[2][2] = {
         { WL1_GPS, WL2_GPS },
@@ -719,38 +675,34 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoi
     };
 
     double BasePos[3], RovPos[3];
-    for (int k = 0; k < 3; k++)
-    {
+    for (int k = 0; k < 3; k++) {
         BasePos[k] = Raw->BaseBest.Pos[k];
         RovPos[k] = Raw->RoverBest.Pos[k];
     }
 
     // 模糊度以“周”为单位，初始值不取整
     VectorXd Amb(2*d);
-    for (int q = 0; q < d; q++)
-    {
+    for (int q = 0; q < d; q++) {
         int sd = DD.SdIndex[q];
         int sys = SD.SdSatObs[sd].System;
-        for (int f = 0; f < 2; f++)
-            Amb(2*q + f) =
-                (DD.ddL[q][f] - DD.ddP[q][f]) / wl[sys][f];
+        for (int f = 0; f < 2; f++){
+            Amb(2*q + f) = (DD.ddL[q][f] - DD.ddP[q][f]) / wl[sys][f];
+        }
     }
 
     // 构造相关权阵：同系统、同频、同类型之间保留相关项
     MatrixXd P = MatrixXd::Zero(obsNum, obsNum);
-    for (int q = 0; q < d; q++)
-    {
+    for (int q = 0; q < d; q++) {
         int sys = SD.SdSatObs[DD.SdIndex[q]].System;
         int ds = DD.DDSatNum[sys];
 
-        for (int r = 0; r < d; r++)
-        {
+        for (int r = 0; r < d; r++) {
             int otherSys = SD.SdSatObs[DD.SdIndex[r]].System;
-            if (otherSys != sys)
+            if (otherSys != sys){
                 continue;
+            }
 
-            for (int t = 0; t < 4; t++)
-            {
+            for (int t = 0; t < 4; t++) {
                 double sigma = codeNoise;
                 if (t >= 2){
                     sigma = phaseNoise;
@@ -765,13 +717,11 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoi
         }
     }
 
-    for (int iteration = 0; iteration < MAXIteration; iteration++)
-    {
+    for (int iteration = 0; iteration < MAXIteration; iteration++) {
         MatrixXd B = MatrixXd::Zero(obsNum, unknownNum);
         VectorXd W = VectorXd::Zero(obsNum);
 
-        for (int q = 0; q < d; q++)
-        {
+        for (int q = 0; q < d; q++) {
             const SDSATOBS& Sat = SD.SdSatObs[DD.SdIndex[q]];
             int sys = Sat.System;
             const SDSATOBS& Ref = SD.SdSatObs[DD.RefPos[sys]];
@@ -789,81 +739,77 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoi
             int row = 4*q;
 
             // 四行的前三列相同，都是几何距离的偏导
-            for (int k = 0; k < 3; k++)
-            {
-                double g =
-                    (RovPos[k] - Rov->SatPVT[jRov].SatPos[k]) / rhoRj
+            for (int k = 0; k < 3; k++) {
+                double g = (RovPos[k] - Rov->SatPVT[jRov].SatPos[k]) / rhoRj
                   - (RovPos[k] - Rov->SatPVT[iRov].SatPos[k]) / rhoRi;
 
-                for (int t = 0; t < 4; t++)
+                for (int t = 0; t < 4; t++){
                     B(row + t, k) = g;
+                }
             }
 
-            for (int f = 0; f < 2; f++)
-            {
+            for (int f = 0; f < 2; f++) {
                 W(row + f) = DD.ddP[q][f] - rhoDD;
-
-                W(row + 2 + f) = DD.ddL[q][f] - rhoDD
-                              - wl[sys][f] * Amb(2*q + f);
-
+                W(row + 2 + f) = DD.ddL[q][f] - rhoDD - wl[sys][f] * Amb(2*q + f);
                 B(row + 2 + f, 3 + 2*q + f) = wl[sys][f];
             }
         }
 
         // 数量足够还不代表可解，必须检查几何秩
-        if (B.fullPivLu().rank() < unknownNum)
+        if (B.fullPivLu().rank() < unknownNum){
             return false;
+        }
 
         MatrixXd Normal = B.transpose() * P * B;
         VectorXd U = B.transpose() * P * W;
 
         // 仍然求解正规方程，用LDLT代替显式求逆
         LDLT<MatrixXd> solver(Normal);
-        if (solver.info() != Success || !solver.isPositive())
+        if (solver.info() != Success || !solver.isPositive()){
             return false;
+        }
 
         VectorXd delta = solver.solve(U);
-        if (solver.info() != Success || !delta.allFinite())
+        if (solver.info() != Success || !delta.allFinite()){
             return false;
-
-        for (int k = 0; k < 3; k++)
+        }
+        for (int k = 0; k < 3; k++){
             RovPos[k] += delta(k);
+        }
 
-        for (int k = 0; k < 2*d; k++)
+        for (int k = 0; k < 2*d; k++){
             Amb(k) += delta(3 + k);
-
+        }
         double correction = sqrt(delta(0)*delta(0) + delta(1)*delta(1) + delta(2)*delta(2));
 
-        if (correction < 1E-4)
-        {
+        if (correction < 1E-4) {
             // 后验残差：不能直接用本轮求解前的W评定精度
             VectorXd v = W - B * delta;
             double variance = v.dot(P * v) / (obsNum - unknownNum);
 
-            MatrixXd Q = solver.solve(
-                MatrixXd::Identity(unknownNum, unknownNum));
+            MatrixXd Q = solver.solve(MatrixXd::Identity(unknownNum, unknownNum));
 
-            if (solver.info() != Success || !Q.allFinite() ||
-                !isfinite(variance) || variance < 0.0)
+            if (solver.info() != Success || !Q.allFinite() || !isfinite(variance) || variance < 0.0){
                 return false;
+            }
 
-            for (int k = 0; k < 3; k++)
-            {
-                if (Q(k, k) < 0.0)
+            for (int k = 0; k < 3; k++){
+                if (Q(k, k) < 0.0){
                     return false;
+                }
             }
 
             DD.QFloat = Q;
             DD.Sigma0 = sqrt(variance);
 
-            for (int k = 0; k < 3; k++)
-            {
+            for (int k = 0; k < 3; k++) {
                 DD.dPos[k] = RovPos[k] - BasePos[k];
                 DD.FloatRMS[k] = DD.Sigma0 * sqrt(Q(k, k));
             }
 
-            for (int k = 0; k < 2*d; k++)
+            for (int k = 0; k < 2*d; k++){
                 DD.FloatAmb[k] = Amb(k);
+            }
 
             return true;
         }
@@ -891,8 +837,7 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoi
         true    接受固定，并完成基线更新
         false   未接受固定，保留浮点基线
 ********************************************************************************/
-bool RTKFix(RAWDAT* Raw, double ratioThreshold)
-{
+bool RTKFix(RAWDAT* Raw, double ratioThreshold){
     DDCOBS& DD = Raw->DDObs;
 
     // 1. 清除上一历元的固定状态和检验结果
@@ -905,11 +850,12 @@ bool RTKFix(RAWDAT* Raw, double ratioThreshold)
     int n = 2 * DD.Sats;
 
     // 当前lambda中的求逆函数最多处理250维
-    if (n <= 0 || n > 250)
+    if (n <= 0 || n > 250){
         return false;
-
-    if (DD.QFloat.rows() != 3 + n || DD.QFloat.cols() != 3 + n)
+    }
+    if (DD.QFloat.rows() != 3 + n || DD.QFloat.cols() != 3 + n){
         return false;
+    }
 
     // 2. 提取模糊度矩阵、坐标与模糊度的交叉矩阵
     MatrixXd Qaa = DD.QFloat.block(3, 3, n, n);
@@ -921,7 +867,6 @@ bool RTKFix(RAWDAT* Raw, double ratioThreshold)
     if (info != 0){
         return false;
     }
-       
 
     // 4. 检查候选代价，避免无效数值和除以零
     if (!isfinite(DD.ResAmb[0]) || !isfinite(DD.ResAmb[1]) ||
@@ -936,34 +881,33 @@ bool RTKFix(RAWDAT* Raw, double ratioThreshold)
     // 5. 计算“固定模糊度减浮点模糊度”
     VectorXd dAmb(n);
 
-    for (int i = 0; i < n; i++)
-    {
+    for (int i = 0; i < n; i++) {
         dAmb(i) = DD.FixedAmb[i] - DD.FloatAmb[i];
     }
 
     // 6. 根据模糊度变化，计算固定基线改正
     LDLT<MatrixXd> solver(Qaa);
 
-    if (solver.info() != Success || !solver.isPositive())
+    if (solver.info() != Success || !solver.isPositive()){
         return false;
+    }
 
     VectorXd u = solver.solve(dAmb);
 
-    if (solver.info() != Success || !u.allFinite())
+    if (solver.info() != Success || !u.allFinite()){
         return false;
+    }
 
     VectorXd dBaseline = Qba * u;
 
-    if (!dBaseline.allFinite())
+    if (!dBaseline.allFinite()){
         return false;
-
-    // 7. 所有计算成功后，再更新基线并标记固定
-    for (int i = 0; i < 3; i++)
-    {
-        DD.dPos[i] += dBaseline(i);
     }
 
+    // 7. 所有计算成功后，再更新基线并标记固定
+    for (int i = 0; i < 3; i++) {
+        DD.dPos[i] += dBaseline(i);
+    }
     DD.bFixed = true;
-
     return true;
 }
