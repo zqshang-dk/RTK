@@ -26,7 +26,7 @@ int ReadRTKEpoch(FILE* fp, SocketHandle sock, int inputMode, unsigned char buff[
     while (true){
         // 1. 先处理缓冲区里已经收到的数据
         int result = DecodeNovOem7Dat(buff, len, Obs, Raw->GpsEph, Raw->BdsEph);
-        // 返回1才表示得到一个观测历元
+        // 返回1：表示得到一个观测历元
         if (result == 1){
             return 1;
         }
@@ -103,7 +103,7 @@ int GetSynObs(FILE* FBas, FILE* FRov,SocketHandle& BasSock, SocketHandle& RovSoc
     }
     // 2. 查找与这个流动站历元匹配的基站历元
     while (true) {
-        if (!hasBaseEpoch) {
+        if (!hasBaseEpoch) {  //如果没有待匹配的基站，就读取一个
             result = ReadRTKEpoch(FBas,BasSock,inputMode,BasBuff,BasLen,&Raw->BasEpk,Raw,"Base");
             if (result == -1) {
                 return -1;
@@ -130,7 +130,7 @@ int GetSynObs(FILE* FBas, FILE* FRov,SocketHandle& BasSock, SocketHandle& RovSoc
 /********************************************************************************
     函数名称：FormSDEpochObs
 
-    函数目的：构造基站和流动站之间的站间单差观测值
+    函数目的：构造基站和流动站之间的站间单差观测值（同一颗卫星在Rover和Base的观测值相减）
 
     核心任务：
         对已经完成时间同步的基站和流动站观测历元进行共同卫星匹配。
@@ -170,12 +170,11 @@ int GetSynObs(FILE* FBas, FILE* FRov,SocketHandle& BasSock, SocketHandle& RovSoc
            GF和平滑计数，供DetectCycleSlip函数使用。
 ********************************************************************************/
 void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHOBS *SDObs){
-    // 1.检查输入指针是否有效(检查空指针，防止访问无效内存)
+    // 1.检查输入指针是否有效
     if (EpkA == nullptr || EpkB == nullptr || SDObs == nullptr) {
         return;
     }
-    // 2.清空当前历元的单差卫星数据
-    // 不清空SdCObs，因为其中需要保留上一历元的MW、GF历史数据
+    // 2.清空当前历元的单差卫星数据（不清空SdCObs，因为其中需要保留上一历元的MWGF历史数据）
     SDObs->SatNum = 0;
     for (int i = 0; i < MAXCHANNUM; i++) {
         SDObs->SdSatObs[i] = SDSATOBS();
@@ -208,7 +207,7 @@ void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHO
             continue;
         }
 
-        const SATOBSDATA& BasSat = EpkA->SatObs[BasIndex];
+        const SATOBSDATA& BasSat = EpkA->SatObs[BasIndex];  //取得对应的Base观测
         // 7.检查两站的双频伪距、载波相位是否完整
         bool DataComplete = true;
 
@@ -242,7 +241,6 @@ void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHO
         SdSat.nRov = i;
 
         // 当前只表示数据完整，可以构造单差
-        // 后续DetectCycleSlip可能会将其改为无效
         SdSat.Valid = 1;
 
         // 10.计算双频伪距和载波相位站间单差
@@ -255,7 +253,6 @@ void FormSDEpochObs(const EPOCHOBSDATA *EpkA, const EPOCHOBSDATA *EpkB, SDEPOCHO
         SDObs->SatNum++;
     }
 }
-
 
 /********************************************************************************
     函数名称：DetectCycleSlip
@@ -509,10 +506,6 @@ void DetRefSat(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* S
     double MinElevation = 40.0 * Deg2Rad;  //最低高度角
 
     double MaxElevation[2] = {0.0, 0.0};
-    // 以站间单差卫星数量进行循环，
-    // 先检查单差数据是否被标记为粗差以及基站与流动站的卫星位置计算
-    // 是否成功，若不通过质量检查则continue。
-    //先将RefPrn和RefPos数组设置为-1；
     for (int i = 0; i < 2;i++){
         DDObs->RefPos[i] = -1;
         DDObs->RefPrn[i] = -1;
@@ -575,7 +568,7 @@ void DetRefSat(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* S
 
 // 站星双差观测值
 void FormDDEpochObs(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHOBS* SDObs, DDCOBS* DDObs){
-    // 只清双差计数，不清除已经选好的参考星
+    // 清空双差卫星计数和各系统计数
     DDObs->Sats = 0;
     DDObs->DDSatNum[0] = 0;
     DDObs->DDSatNum[1] = 0;
@@ -584,7 +577,7 @@ void FormDDEpochObs(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHO
     // sys=0为GPS，sys=1为BDS
     for (int sys = 0; sys < 2; sys++) {
         int ref = DDObs->RefPos[sys];
-        if (ref < 0 || ref >= SDObs->SatNum){
+        if (ref < 0 || ref >= SDObs->SatNum){ //该系统没有参考卫星就跳过
             continue;
         }
             
@@ -625,6 +618,7 @@ void FormDDEpochObs(const EPOCHOBSDATA* EpkA, const EPOCHOBSDATA* EpkB, SDEPOCHO
             if (!usable){
                 continue;
             }
+            //记录该双差卫星对应的单差数组的下标
             int q = DDObs->Sats;
             DDObs->SdIndex[q] = j;
 
@@ -656,15 +650,15 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoi
     for (int k = 0; k < MAXCHANNUM * 2; k++){
         DD.FloatAmb[k] = 0.0;
     }
-    int d = DD.Sats;           // 非参考双差卫星数
+    int d = DD.Sats;           // 非参考双差卫星数，少于3颗卫星就不解算
     if (d < 3){
         return false;
     }
 
     int obsNum = 4 * d;        // 每星P1、P2、L1、L2
-    int unknownNum = 3 + 2*d;  // 三维坐标、每星两个模糊度
+    int unknownNum = 3 + 2*d;  // 三维坐标、每星两个模糊度（2个频率）
 
-    // 使用配置文件中的CodeNoise和CPNoise，单位为米。
+    // 使用配置文件中的CodeNoise和CarrierNoise，单位为米。
     if (!isfinite(codeNoise) || !isfinite(phaseNoise) || codeNoise <= 0.0 || phaseNoise <= 0.0){
             return false;
         }
@@ -673,7 +667,7 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoi
         { WL1_GPS, WL2_GPS },
         { WL1_BDS, WL3_BDS }
     };
-
+    //取 Base、Rover 的初始坐标；它们来自前面计算的单点定位结果。
     double BasePos[3], RovPos[3];
     for (int k = 0; k < 3; k++) {
         BasePos[k] = Raw->BaseBest.Pos[k];
@@ -681,11 +675,12 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoi
     }
 
     // 模糊度以“周”为单位，初始值不取整
-    VectorXd Amb(2*d);
+    VectorXd Amb(2*d); 
     for (int q = 0; q < d; q++) {
         int sd = DD.SdIndex[q];
         int sys = SD.SdSatObs[sd].System;
         for (int f = 0; f < 2; f++){
+            //Amb=(DD载波相位 - DD伪距) / lambda
             Amb(2*q + f) = (DD.ddL[q][f] - DD.ddP[q][f]) / wl[sys][f];
         }
     }

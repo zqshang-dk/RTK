@@ -322,10 +322,10 @@ int main(int argc, char* argv[])
             bool floatOK = false;
 
             if (config.RTKProcMode == 1){
-                floatOK = RTKFloatEKF(&Raw,&Raw.BasEpk,&Raw.RovEpk,config.CodeNoise,config.CPNoise,positionNoise);
+                floatOK = RTKFloatEKF(&Raw,&Raw.BasEpk,&Raw.RovEpk,config.CodeNoise,config.CarrierNoise,positionNoise);
             }
             else{
-                floatOK = RTKFloat(&Raw,&Raw.BasEpk,&Raw.RovEpk,config.CodeNoise,config.CPNoise);
+                floatOK = RTKFloat(&Raw,&Raw.BasEpk,&Raw.RovEpk,config.CodeNoise,config.CarrierNoise);
             }
             if (!floatOK){
                 WriteRTKResult(rtkLog, Raw, false, "FLOAT_FAILED", gpsUsed, bdsUsed);

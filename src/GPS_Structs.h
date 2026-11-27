@@ -253,7 +253,7 @@ struct ROVERCFGINFO   // 配置信息
 	int    RovPort, RovBaud;             // COM端口设置
 	char   BasNetIP[20], RovNetIP[20];   // ip address
 	unsigned short BasNetPort, RovNetPort; // port
-	double CodeNoise, CPNoise;           // 伪距噪声
+	double CodeNoise, CarrierNoise;           // 伪距噪声
 	double ElevThreshold;                // 高度角阈值
 	double RatioThres;                   // Ratio检验阈值
 
@@ -267,7 +267,7 @@ struct ROVERCFGINFO   // 配置信息
 		IsFileData = INPUT_MODE_FILE;
 		RTKProcMode = 2;
 		RovPort = RovBaud = BasNetPort = RovNetPort = 0;
-		CodeNoise = CPNoise = ElevThreshold = 0.0;
+		CodeNoise = CarrierNoise = ElevThreshold = 0.0;
 		RatioThres = 3.0;
 		BasNetIP[0] = RovNetIP[0] = '\0';
 		SPPObsDatFile[0] = BasObsDatFile[0] = RovObsDatFile[0] = '\0';

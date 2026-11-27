@@ -54,7 +54,7 @@ bool ReadRTKConfigInfo(const char configFile[], ROVERCFGINFO* config)
 	strcpy(config->ResFile, "position_result.txt");
 
 	config->CodeNoise = 1.0;
-	config->CPNoise = 0.01;
+	config->CarrierNoise = 0.01;
 	config->ElevThreshold = 15.0;
 	config->RatioThres = 3.0;
 
@@ -147,9 +147,9 @@ bool ReadRTKConfigInfo(const char configFile[], ROVERCFGINFO* config)
 			{
 				config->CodeNoise = stod(value);
 			}
-			else if (key == "CPNoise")
+			else if (key == "CarrierNoise")
 			{
-				config->CPNoise = stod(value);
+				config->CarrierNoise = stod(value);
 			}
 			else if (key == "ElevThreshold")
 			{
@@ -226,9 +226,9 @@ bool ReadRTKConfigInfo(const char configFile[], ROVERCFGINFO* config)
 		return false;
 	}
 
-	if (config->CodeNoise <= 0.0 || config->CPNoise <= 0.0)
+	if (config->CodeNoise <= 0.0 || config->CarrierNoise <= 0.0)
 	{
-		cout << "Error: CodeNoise and CPNoise must be greater than 0." << endl;
+		cout << "Error: CodeNoise and CarrierNoise must be greater than 0." << endl;
 		return false;
 	}
 

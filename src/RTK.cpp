@@ -707,7 +707,7 @@ bool RTKFloat(RAWDAT* Raw, EPOCHOBSDATA* Base, EPOCHOBSDATA* Rov, double codeNoi
     int obsNum = 4 * d;        // 每星P1、P2、L1、L2
     int unknownNum = 3 + 2*d;  // 三维坐标、每星两个模糊度
 
-    // 使用配置文件中的CodeNoise和CPNoise，单位为米。
+    // 使用配置文件中的CodeNoise和CarrierNoise，单位为米。
     if (!isfinite(codeNoise) || !isfinite(phaseNoise) ||
         codeNoise <= 0.0 || phaseNoise <= 0.0)
         return false;

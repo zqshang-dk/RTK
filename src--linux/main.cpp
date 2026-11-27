@@ -9,58 +9,129 @@
 using namespace std;
 
 
+// /* 输出RTK结果 */
+// void WriteRTKResult(ofstream& log,const RAWDAT& Raw,bool hasSolution,const char status[],int gpsUsed,int bdsUsed){
+//     log << fixed << setprecision(4);
+//     log << Raw.RovEpk.Time.Week<< " " << Raw.RovEpk.Time.SecOfWeek;
+
+//     if (hasSolution) {
+//         double baseXYZ[3] = {};
+//         double roverXYZ[3] = {};
+//         double dENU[3] = {};
+
+//         for (int i = 0; i < 3; i++)
+//             baseXYZ[i] = Raw.BaseBest.Pos[i];
+//         for (int i = 0; i < 3; i++)
+//             roverXYZ[i] = baseXYZ[i] + Raw.DDObs.dPos[i];
+
+//         CompEnudPos(baseXYZ, roverXYZ, dENU, R_WGS84, F_WGS84);
+
+//         log << " " << roverXYZ[0]
+//             << " " << roverXYZ[1]
+//             << " " << roverXYZ[2]
+//             << " " << dENU[0]
+//             << " " << dENU[1]
+//             << " " << dENU[2];
+//     }
+//     else {
+//         log << " nan nan nan nan nan nan";
+//     }
+
+//     if (hasSolution) {
+//         log << " " << Raw.DDObs.Ratio;
+//     }
+//     else{
+//         log << " nan";
+//     }
+//     if (gpsUsed >= 0){
+//         log << " " << gpsUsed;
+//     }
+//     else{
+//         log << " nan";
+//     }
+//     if (bdsUsed >= 0){
+//         log << " " << bdsUsed;
+//     }
+//     else{
+//         log << " nan";
+//     }
+//     log << " " << status << endl;
+// }
+
+
 /* 输出RTK结果 */
-void WriteRTKResult( ofstream& log, const RAWDAT& Raw, bool hasSolution,const char reason[],int gpsUsed,int bdsUsed)
+void WriteRTKResult(ofstream& log, const RAWDAT& Raw,bool hasSolution, const char status[],int gpsUsed, int bdsUsed)
 {
     log << fixed << setprecision(4);
 
+    // 1. GPS时间
     log << Raw.RovEpk.Time.Week
         << " " << Raw.RovEpk.Time.SecOfWeek;
 
     if (hasSolution) {
+        double baseXYZ[3] = {};
+        double roverXYZ[3] = {};
+        double dENU[3] = {};
+
+        // 2. 基准站和流动站ECEF坐标
+        for (int i = 0; i < 3; i++) {
+            baseXYZ[i] = Raw.BaseBest.Pos[i];
+            roverXYZ[i] = baseXYZ[i] + Raw.DDObs.dPos[i];
+        }
+
+        // 3. 计算ENU基线
+        CompEnudPos(baseXYZ, roverXYZ, dENU,R_WGS84, F_WGS84);
+
+        // 4. 输出流动站ECEF坐标
+        log << " " << roverXYZ[0]
+            << " " << roverXYZ[1]
+            << " " << roverXYZ[2];
+
+        // 5. 输出ECEF基线向量
         log << " " << Raw.DDObs.dPos[0]
             << " " << Raw.DDObs.dPos[1]
-            << " " << Raw.DDObs.dPos[2]
-            << " " << Raw.DDObs.FloatRMS[0]
-            << " " << Raw.DDObs.FloatRMS[1]
-            << " " << Raw.DDObs.FloatRMS[2]
-            << " " << Raw.DDObs.Sigma0;
+            << " " << Raw.DDObs.dPos[2];
+
+        // 6. 输出ENU基线向量
+        log << " " << dENU[0]
+            << " " << dENU[1]
+            << " " << dENU[2];
     }
     else {
-        log << " nan nan nan nan nan nan nan";
+        // 计算失败时，9个坐标字段统一输出nan
+        log << " nan nan nan nan nan nan nan nan nan";
     }
 
-    if (gpsUsed >= 0 && bdsUsed >= 0)
-        log << " " << Raw.DDObs.Sats;
-    else
-        log << " nan";
-
+    // 7. Ratio
     if (hasSolution) {
-        if (Raw.DDObs.bFixed)
-            log << " FIX";
-        else
-            log << " FLOAT";
-
         log << " " << Raw.DDObs.Ratio;
     }
     else {
-        log << " INVALID nan";
+        log << " nan";
     }
 
-    if (gpsUsed >= 0)
+    // 8. GPS卫星数量
+    if (gpsUsed >= 0) {
         log << " " << gpsUsed;
-    else
+    }
+    else {
         log << " nan";
+    }
 
-    if (bdsUsed >= 0)
+    // 9. BDS卫星数量
+    if (bdsUsed >= 0) {
         log << " " << bdsUsed;
-    else
+    }
+    else {
         log << " nan";
+    }
 
-    log << " " << reason << endl;
+    // 10. 定位状态
+    log << " " << status << endl;
 }
 
 
+//argc 是命令行参数数量，argv 保存参数内容
 int main(int argc, char* argv[])
 {
     // 1. 读取配置文件
@@ -77,12 +148,11 @@ int main(int argc, char* argv[])
     }
 
     const double elevationThreshold = config.ElevThreshold * Deg2Rad;
-
-    // 当前配置结构中没有PositionNoise，暂时使用固定值。
     const double positionNoise = 1.0;
 
     switch (config.PositionMode) {
-    case POSITION_MODE_RTK:{
+    case POSITION_MODE_RTK:
+    {
         FILE* FBas = nullptr;
         FILE* FRov = nullptr;
 
@@ -95,31 +165,24 @@ int main(int argc, char* argv[])
             FRov = fopen(config.RovObsDatFile, "rb");
 
             if (FBas == nullptr || FRov == nullptr) {
-                cout << "Error: open RTK observation file failed."
-                    << endl;
+                cout << "Error: open RTK observation file failed."<< endl;
 
-                if (FBas != nullptr)
+                if (FBas != nullptr){
                     fclose(FBas);
-
-                if (FRov != nullptr)
+                } 
+                if (FRov != nullptr){
                     fclose(FRov);
-
+                }
                 return 1;
             }
         }
         else {
-            if (!OpenSocket(
-                    BasSock,
-                    config.BasNetIP,
-                    config.BasNetPort)) {
+            if (!OpenSocket(BasSock,config.BasNetIP,config.BasNetPort)) {
                 cout << "Error: connect base failed." << endl;
                 return 1;
             }
 
-            if (!OpenSocket(
-                    RovSock,
-                    config.RovNetIP,
-                    config.RovNetPort)) {
+            if (!OpenSocket(RovSock,config.RovNetIP,config.RovNetPort)) {
                 cout << "Error: connect rover failed." << endl;
                 CloseSocket(BasSock);
                 return 1;
@@ -130,29 +193,27 @@ int main(int argc, char* argv[])
         ofstream log(config.ResFile, ios::out);
 
         if (!log.is_open()) {
-            cout << "Error: open result file failed: "
-                << config.ResFile << endl;
+            cout << "Error: open result file failed: "<< config.ResFile << endl;
 
-            if (FBas != nullptr)
-                fclose(FBas);
-
-            if (FRov != nullptr)
-                fclose(FRov);
-
+            if (FBas != nullptr){
+                fclose(FBas);                
+            }
+            if (FRov != nullptr){
+                fclose(FRov);                
+            }
             CloseSocket(BasSock);
             CloseSocket(RovSock);
             return 1;
         }
 
-        log << "WEEK SOW BASELINE_X BASELINE_Y BASELINE_Z "
-            << "RMS_X RMS_Y RMS_Z SIGMA0 DD_SATS STATUS RATIO "
-            << "GPS_USED BDS_USED REASON" << endl;
+        log << "#Week SOW X(m) Y(m) Z(m) dX(m) dY(m) dZ(m) dE(m) dN(m) dU(m) Ratio GPSNum BDSNum Status" << endl;
 
         // 4. 初始化RTK数据和滤波器
         RAWDAT Raw{};
 
-        if (config.RTKProcMode == 1)
+        if (config.RTKProcMode == 1){  //1=EKF
             EKFReset(true);
+        }
 
         int totalEpoch = 0;
         int successEpoch = 0;
@@ -161,42 +222,24 @@ int main(int argc, char* argv[])
 
         while (true) {
             // 5. 读取并同步基站、流动站历元
-            int result = GetSynObs(
-                FBas,
-                FRov,
-                BasSock,
-                RovSock,
-                &Raw,
-                config.IsFileData);
-
+            int result = GetSynObs(FBas,FRov,BasSock,RovSock,&Raw,config.IsFileData);
             if (result == -1) {
                 // 约定：-1表示正常结束。
                 break;
             }
-
             if (result == -2) {
-                // 需要同步修改RTK.cpp，让读取错误返回-2。
-                cout << "Error: read or synchronize RTK input failed."
-                    << endl;
+                cout << "Error: read or synchronize RTK input failed."<< endl;
                 inputError = true;
                 break;
             }
 
             if (result == 0) {
-                WriteRTKResult(
-                    log,
-                    Raw,
-                    false,
-                    "NOT_SYNCHRONIZED",
-                    -1,
-                    -1);
-
+                WriteRTKResult(log,Raw, false,"NOT_SYNCHRONIZED",-1,-1);
                 continue;
             }
 
             if (result != 1) {
-                cout << "Error: unexpected GetSynObs return value: "
-                    << result << endl;
+                cout << "Error: unexpected GetSynObs return value: " << result << endl;
                 inputError = true;
                 break;
             }
@@ -207,87 +250,49 @@ int main(int argc, char* argv[])
             DetectOutlier(&Raw.BasEpk);
             DetectOutlier(&Raw.RovEpk);
 
-            FormSDEpochObs(
-                &Raw.BasEpk,
-                &Raw.RovEpk,
-                &Raw.SdObs);
-
-            DetectCycleSlip(
-                &Raw.BasEpk,
-                &Raw.RovEpk,
-                &Raw.SdObs);
+            FormSDEpochObs(&Raw.BasEpk,&Raw.RovEpk,&Raw.SdObs);
+            DetectCycleSlip(&Raw.BasEpk,&Raw.RovEpk,&Raw.SdObs);
 
             // 7. 基站和流动站SPP
-            bool baseOK = SPP(
-                Raw.GpsEph,
-                Raw.BdsEph,
-                &Raw.BaseBest,
-                &Raw.BasEpk,
-                elevationThreshold);
-
-            bool roverOK = SPP(
-                Raw.GpsEph,
-                Raw.BdsEph,
-                &Raw.RoverBest,
-                &Raw.RovEpk,
-                elevationThreshold);
+            bool baseOK = SPP(Raw.GpsEph,Raw.BdsEph,&Raw.BaseBest,&Raw.BasEpk, elevationThreshold);
+            bool roverOK = SPP(Raw.GpsEph,Raw.BdsEph,&Raw.RoverBest, &Raw.RovEpk,elevationThreshold);
 
             if (!baseOK || !roverOK) {
                 const char* reason = "BASE_AND_ROVER_SPP_FAILED";
 
-                if (baseOK)
+                if (baseOK){
                     reason = "ROVER_SPP_FAILED";
-                else if (roverOK)
+                }
+                else if (roverOK){
                     reason = "BASE_SPP_FAILED";
+                }
+                WriteRTKResult(log,Raw,false,reason,-1,-1);
 
-                WriteRTKResult(
-                    log,
-                    Raw,
-                    false,
-                    reason,
-                    -1,
-                    -1);
-
-                if (config.RTKProcMode == 1)
+                if (config.RTKProcMode == 1){
                     EKFReset(false);
-
+                }
                 continue;
             }
 
             // 8. 选择参考星并构造双差
-            DetRefSat(
-                &Raw.BasEpk,
-                &Raw.RovEpk,
-                &Raw.SdObs,
-                &Raw.DDObs);
-
-            FormDDEpochObs(
-                &Raw.BasEpk,
-                &Raw.RovEpk,
-                &Raw.SdObs,
-                &Raw.DDObs);
+            DetRefSat(&Raw.BasEpk,&Raw.RovEpk,&Raw.SdObs,&Raw.DDObs);
+            FormDDEpochObs(&Raw.BasEpk,&Raw.RovEpk,&Raw.SdObs,&Raw.DDObs);
 
             int gpsUsed = Raw.DDObs.DDSatNum[GPS];
             int bdsUsed = Raw.DDObs.DDSatNum[BDS];
 
-            if (gpsUsed > 0 && Raw.DDObs.RefPos[GPS] >= 0)
+            if (gpsUsed > 0 && Raw.DDObs.RefPos[GPS] >= 0){
                 gpsUsed++;
-
-            if (bdsUsed > 0 && Raw.DDObs.RefPos[BDS] >= 0)
+            }
+            if (bdsUsed > 0 && Raw.DDObs.RefPos[BDS] >= 0){
                 bdsUsed++;
-
+            }
             if (Raw.DDObs.Sats < 3) {
-                WriteRTKResult(
-                    log,
-                    Raw,
-                    false,
-                    "TOO_FEW_DD_SATS",
-                    gpsUsed,
-                    bdsUsed);
+                WriteRTKResult(log,Raw,false,"TOO_FEW_DD_SATS",gpsUsed,bdsUsed);
 
-                if (config.RTKProcMode == 1)
+                if (config.RTKProcMode == 1){
                     EKFReset(false);
-
+                }
                 continue;
             }
 
@@ -295,24 +300,17 @@ int main(int argc, char* argv[])
             bool referenceOK = true;
 
             for (int sys = 0; sys < 2; sys++) {
-                if (Raw.DDObs.DDSatNum[sys] > 0 &&
-                    Raw.DDObs.RefPos[sys] < 0) {
+                if (Raw.DDObs.DDSatNum[sys] > 0 && Raw.DDObs.RefPos[sys] < 0) {
                     referenceOK = false;
                 }
             }
 
             if (!referenceOK) {
-                WriteRTKResult(
-                    log,
-                    Raw,
-                    false,
-                    "NO_REFERENCE_SAT",
-                    gpsUsed,
-                    bdsUsed);
+                WriteRTKResult(log,Raw,false,"NO_REFERENCE_SAT",gpsUsed,bdsUsed);
 
-                if (config.RTKProcMode == 1)
+                if (config.RTKProcMode == 1){
                     EKFReset(false);
-
+                }
                 continue;
             }
 
@@ -320,63 +318,26 @@ int main(int argc, char* argv[])
             bool floatOK = false;
 
             if (config.RTKProcMode == 1) {
-                floatOK = RTKFloatEKF(
-                    &Raw,
-                    &Raw.BasEpk,
-                    &Raw.RovEpk,
-                    config.CodeNoise,
-                    config.CPNoise,
-                    positionNoise);
+                floatOK =RTKFloatEKF(&Raw,&Raw.BasEpk,&Raw.RovEpk,config.CodeNoise,config.CarrierNoise,positionNoise);
             }
             else if (config.RTKProcMode == 2) {
-                floatOK = RTKFloat(
-                    &Raw,
-                    &Raw.BasEpk,
-                    &Raw.RovEpk,
-                    config.CodeNoise,
-                    config.CPNoise);
+                floatOK = RTKFloat(&Raw,&Raw.BasEpk,&Raw.RovEpk,config.CodeNoise,config.CarrierNoise);
             }
 
             if (!floatOK) {
-                WriteRTKResult(
-                    log,
-                    Raw,
-                    false,
-                    "FLOAT_FAILED",
-                    gpsUsed,
-                    bdsUsed);
-
+                WriteRTKResult(log,Raw,false,"FLOAT_FAILED", gpsUsed,bdsUsed);
                 continue;
             }
 
             successEpoch++;
 
             // 11. 整数模糊度固定
-            bool fixedOK = RTKFix(
-                &Raw,
-                config.RatioThres);
+            bool fixedOK = RTKFix(&Raw,config.RatioThres);
 
-            if (fixedOK)
+            if (fixedOK){
                 fixedEpoch++;
-
-            if (fixedOK) {
-                WriteRTKResult(
-                    log,
-                    Raw,
-                    true,
-                    "OK",
-                    gpsUsed,
-                    bdsUsed);
             }
-            else {
-                WriteRTKResult(
-                    log,
-                    Raw,
-                    true,
-                    "FIX_NOT_ACCEPTED",
-                    gpsUsed,
-                    bdsUsed);
-            }
+            WriteRTKResult(log,Raw,true,fixedOK ? "FIXED" : "FLOAT",gpsUsed,bdsUsed);
 
             cout << "Epoch " << totalEpoch
                 << " dX=" << Raw.DDObs.dPos[0]
@@ -386,36 +347,32 @@ int main(int argc, char* argv[])
         }
 
         // 12. 关闭输入并检查结果文件
-        if (FBas != nullptr)
-            fclose(FBas);
-
-        if (FRov != nullptr)
+        if (FBas != nullptr){
+            fclose(FBas);            
+        }
+        if (FRov != nullptr){
             fclose(FRov);
-
+        }
         CloseSocket(BasSock);
         CloseSocket(RovSock);
 
         log << "# TOTAL_EPOCH=" << totalEpoch
             << " SUCCESS_EPOCH=" << successEpoch
-            << " FIXED_EPOCH=" << fixedEpoch
-            << endl;
-
+            << " FIXED_EPOCH=" << fixedEpoch << endl;
         log.close();
 
         if (!log) {
-            cout << "Error: write result file failed: "
-                << config.ResFile << endl;
+            cout << "Error: write result file failed: " << config.ResFile << endl;
             return 1;
         }
 
-        if (inputError)
+        if (inputError){
             return 1;
-
+        }
         cout << "RTK finished." << endl;
         cout << "Total epoch: " << totalEpoch << endl;
         cout << "Float epoch: " << successEpoch << endl;
         cout << "Fixed epoch: " << fixedEpoch << endl;
-
         return 0;
     }
 
@@ -427,18 +384,13 @@ int main(int argc, char* argv[])
         // 2. 打开SPP输入
         if (config.IsFileData == INPUT_MODE_FILE) {
             fp = fopen(config.SPPObsDatFile, "rb");
-
             if (fp == nullptr) {
-                cout << "Error: open SPP observation file failed: "
-                    << config.SPPObsDatFile << endl;
+                cout << "Error: open SPP observation file failed: " << config.SPPObsDatFile << endl;
                 return 1;
             }
         }
         else {
-            if (!OpenSocket(
-                    sock,
-                    config.RovNetIP,
-                    config.RovNetPort)) {
+            if (!OpenSocket(sock,config.RovNetIP,config.RovNetPort)) {
                 cout << "Error: connect rover failed." << endl;
                 return 1;
             }
@@ -448,18 +400,15 @@ int main(int argc, char* argv[])
         ofstream log(config.ResFile, ios::out);
 
         if (!log.is_open()) {
-            cout << "Error: open result file failed: "
-                << config.ResFile << endl;
-
-            if (fp != nullptr)
-                fclose(fp);
-
+            cout << "Error: open result file failed: " << config.ResFile << endl;
+            if (fp != nullptr){
+                fclose(fp);                
+            }
             CloseSocket(sock);
             return 1;
         }
 
-        log << "WEEK SOW X Y Z PDOP SIGMA GPS_SATS BDS_SATS"
-            << endl;
+        log << "WEEK SOW X Y Z PDOP SIGMA GPSNum BDSNum" << endl;
 
         unsigned char buffer[MAXRAWLEN] = {};
         int length = 0;
@@ -479,12 +428,7 @@ int main(int argc, char* argv[])
 
         while (true) {
             // 4. 先处理缓冲区里的数据；没有完整观测历元时再读取新数据
-            int result = DecodeNovOem7Dat(
-                buffer,
-                length,
-                &Obs,
-                GpsEph,
-                BdsEph);
+            int result = DecodeNovOem7Dat(buffer,length,&Obs,GpsEph,BdsEph);
 
             if (result == 1) {
                 totalEpoch++;
@@ -494,23 +438,13 @@ int main(int argc, char* argv[])
 
                 UserPos.Time = Obs.Time;
 
-                SatPVTCalculation(
-                    GpsEph,
-                    BdsEph,
-                    &Obs,
-                    &UserPos);
+                SatPVTCalculation(GpsEph,BdsEph,&Obs, &UserPos);
 
                 // 6. SPP定位
-                bool sppOK = SPP(
-                    GpsEph,
-                    BdsEph,
-                    &UserPos,
-                    &Obs,
-                    elevationThreshold);
+                bool sppOK = SPP(GpsEph,BdsEph,&UserPos, &Obs,elevationThreshold);
 
                 if (!sppOK) {
-                    cout << "SPP failed: "
-                        << Obs.Time.Week << " "
+                    cout << "SPP failed: " << Obs.Time.Week << " "
                         << Obs.Time.SecOfWeek << endl;
 
                     continue;
@@ -519,17 +453,13 @@ int main(int argc, char* argv[])
                 successEpoch++;
 
                 // 7. SPP测速
-                SPV(
-                    &Obs,
-                    &UserPos,
-                    elevationThreshold);
+                SPV(&Obs,&UserPos,elevationThreshold);
 
                 int gpsSatNum = 0;
                 int bdsSatNum = 0;
 
                 for (int i = 0; i < Obs.SatNum; i++) {
-                    if (!Obs.SatObs[i].valid ||
-                        !Obs.SatPVT[i].Valid) {
+                    if (!Obs.SatObs[i].valid || !Obs.SatPVT[i].Valid) {
                         continue;
                     }
 
@@ -573,21 +503,15 @@ int main(int argc, char* argv[])
 
             if (config.IsFileData == INPUT_MODE_FILE) {
                 readLength = static_cast<int>(
-                    fread(
-                        buffer + length,
-                        1,
-                        MAXRAWLEN - length,
-                        fp));
+                    fread(buffer + length, 1, MAXRAWLEN - length,fp));
 
                 if (readLength == 0) {
                     if (ferror(fp) != 0) {
-                        cout << "Error: read SPP observation file failed."
-                            << endl;
+                        cout << "Error: read SPP observation file failed."<< endl;
                         inputError = true;
                     }
                     else if (length > 0) {
-                        cout << "Error: incomplete OEM7 message at end of file."
-                            << endl;
+                        cout << "Error: incomplete OEM7 message at end of file."<< endl;
                         inputError = true;
                     }
 
@@ -595,16 +519,11 @@ int main(int argc, char* argv[])
                 }
             }
             else {
-                readLength = recv(
-                    sock,
-                    reinterpret_cast<char*>(buffer) + length,
-                    MAXRAWLEN - length,
-                    0);
+                readLength = recv(sock,reinterpret_cast<char*>(buffer) + length,MAXRAWLEN - length,0);
 
                 if (readLength == 0) {
                     if (length > 0) {
-                        cout << "Error: incomplete OEM7 message at end of stream."
-                            << endl;
+                        cout << "Error: incomplete OEM7 message at end of stream."<< endl;
                         inputError = true;
                     }
 

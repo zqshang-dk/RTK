@@ -1,9 +1,59 @@
-/.serena/
-/PPT/
-/data/
-/code/
-*.zip
-*.exe
-/RTK-main/
-/build/
-/output/
+# 默认忽略仓库根目录下所有内容
+/*
+
+# output
+!/output/
+/output/*
+!/output/EKF
+!/output/LSQ
+!/output/LSQ.txt
+!/output/EKF.txt
+
+# ctrl
+!/ctrl/
+/ctrl/*
+!/ctrl/RTKConfiglinuxnew.ini
+
+# fig
+!/fig/
+/fig/*
+!/fig/EKF/
+/fig/EKF/*
+!/fig/EKF/main.py
+!/fig/EKF/plot_01_enu_timeseries.py
+!/fig/EKF/plot_02_horizontal_vertical.py
+!/fig/EKF/plot_03_enu_histogram.py
+!/fig/EKF/plot_04_horizontal_scatter.py
+!/fig/EKF/plot_05_accuracy_comparison.py
+!/fig/EKF/plot_06_satellite_count.py
+!/fig/EKF/plot_07_fix_rate.py
+!/fig/EKF/plot_08_ratio_timeseries.py
+!/fig/EKF/rtk_common.py
+
+!/fig/LSQ/
+/fig/LSQ/*
+!/fig/LSQ/main.py
+!/fig/LSQ/plot_01_enu_timeseries.py
+!/fig/LSQ/plot_02_horizontal_vertical.py
+!/fig/LSQ/plot_03_enu_histogram.py
+!/fig/LSQ/plot_04_horizontal_scatter.py
+!/fig/LSQ/plot_05_accuracy_comparison.py
+!/fig/LSQ/plot_06_satellite_count.py
+!/fig/LSQ/plot_07_fix_rate.py
+!/fig/LSQ/plot_08_ratio_timeseries.py
+!/fig/LSQ/rtk_common.py
+
+!/fig/数据读取.png
+!/fig/主程序.png
+!/fig/最小二乘浮点解.png
+!/fig/EKF解算流程.png
+!/fig/RTK总体架构.png
+
+# report
+!/report/
+/report/*
+!/report/报告.pdf
+
+# 源代码目录：保留目录及其中所有内容
+!/src/
+!/src--linux/
